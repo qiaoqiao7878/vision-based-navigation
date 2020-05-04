@@ -345,10 +345,17 @@ void compute_projections() {
       Eigen::Vector3d p_3d = aprilgrid.aprilgrid_corner_pos_3d[i];
 
       // TODO SHEET 2: project point
+      Eigen::Vector3d project_point;
+      project_point = T_i_c * T_w_i * p_3d;
+
+      // given
       UNUSED(T_w_i);
       UNUSED(T_i_c);
       UNUSED(p_3d);
       Eigen::Vector2d p_2d;
+
+      // I wrote
+      p_2d = calib_cam.intrinsics.back()->project(project_point);
 
       ccd.corners.push_back(p_2d);
     }
@@ -362,7 +369,18 @@ void optimize() {
   ceres::Problem problem;
 
   // TODO SHEET 2: setup optimization problem
+  for (const auto& kv : calib_corners) {
+    for (size_t i = 0; i < aprilgrid.aprilgrid_corner_pos_3d.size(); i++) {
+      Eigen::Vector3d p_3d = aprilgrid.aprilgrid_corner_pos_3d[i];
+      Eigen::Vector2d p_2d = kv.first.cam_id;
 
+      ceres::CostFunction* cost_function =
+          new ceres::AutoDiffCostFunction<ReprojectionCostFunctor, 1, 2, 3>(
+              new ReprojectionCostFunctor(p_2d, p_3d, cam_model));
+      problem.AddResidualBlock(cost_function, NULL, );
+    }
+  }
+  // given:
   ceres::Solver::Options options;
   options.gradient_tolerance = 0.01 * Sophus::Constants<double>::epsilon();
   options.function_tolerance = 0.01 * Sophus::Constants<double>::epsilon();
