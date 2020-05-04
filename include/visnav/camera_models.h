@@ -428,7 +428,9 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
     // undoned
     Scalar theta_star;
     Scalar theta = 0;
+    int i = 0;
     while (true) {
+      i++;
       theta =
           theta -
           (theta * (1 + theta * theta *
@@ -441,11 +443,12 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
                         theta * theta *
                             (5 * k2 + theta * theta *
                                           (7 * k3 + 9 * k4 * theta * theta))));
-      if ((theta * (1 + theta * theta *
-                            (k1 + theta * theta *
-                                      (k2 + theta * theta *
-                                                (k3 + k4 * theta * theta)))) -
-           r_u) < 1e-30) {
+      if (((theta * (1 + theta * theta *
+                             (k1 + theta * theta *
+                                       (k2 + theta * theta *
+                                                 (k3 + k4 * theta * theta)))) -
+            r_u) < 1e-40) and
+          (i > 5)) {
         break;
       }
     }

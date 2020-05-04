@@ -345,8 +345,10 @@ void compute_projections() {
       Eigen::Vector3d p_3d = aprilgrid.aprilgrid_corner_pos_3d[i];
 
       // TODO SHEET 2: project point
-      Eigen::Vector3d project_point;
-      project_point = T_i_c * T_w_i * p_3d;
+      Eigen::Vector3d point_in_image_frame;
+
+      // convert the 3D point from world frame to image frame
+      point_in_image_frame = T_i_c.inverse() * T_w_i.inverse() * p_3d;
 
       // given
       UNUSED(T_w_i);
@@ -354,9 +356,11 @@ void compute_projections() {
       UNUSED(p_3d);
       Eigen::Vector2d p_2d;
 
-      // I wrote
-      p_2d = calib_cam.intrinsics.back()->project(project_point);
+      // propect into 2D
+      p_2d =
+          calib_cam.intrinsics[kv.first.cam_id]->project(point_in_image_frame);
 
+      // given
       ccd.corners.push_back(p_2d);
     }
 
@@ -369,15 +373,36 @@ void optimize() {
   ceres::Problem problem;
 
   // TODO SHEET 2: setup optimization problem
-  for (const auto& kv : calib_corners) {
-    for (size_t i = 0; i < aprilgrid.aprilgrid_corner_pos_3d.size(); i++) {
-      Eigen::Vector3d p_3d = aprilgrid.aprilgrid_corner_pos_3d[i];
-      Eigen::Vector2d p_2d = kv.first.cam_id;
 
+  for (const auto& kv : calib_corners) {
+    for (size_t i = 0; i < kv.second.corners.size(); i++) {
+      problem.AddParameterBlock(vec_T_w_i[kv.first.cam_id].data(),
+                                vec_T_w_i[kv.first.cam_id].num_parameters,
+                                new Sophus::test::LocalParameterizationSE3);
+
+      problem.AddParameterBlock(calib_cam.T_i_c[kv.first.cam_id].data(),
+                                calib_cam.T_i_c[kv.first.cam_id].num_parameters,
+                                new Sophus::test::LocalParameterizationSE3);
+      problem.SetParameterBlockConstant(
+          calib_cam.T_i_c[kv.first.cam_id].data());
+
+      problem.AddParameterBlock(
+          calib_cam.intrinsics[kv.first.cam_id]->data(),
+          calib_cam.intrinsics[kv.first.cam_id]->getParam().size());
+      Eigen::Vector3d p_3d =
+          aprilgrid.aprilgrid_corner_pos_3d[kv.second.corner_ids[i]];
+      // detected 2D points
+      Eigen::Vector2d p_2d = kv.second.corners[kv.second.corner_ids[i]];
+
+      // dimension of residual,p_2d,p_3d,intrinsics
+      // How can I write the dimension of intrinsics here?
       ceres::CostFunction* cost_function =
-          new ceres::AutoDiffCostFunction<ReprojectionCostFunctor, 1, 2, 3>(
+          new ceres::AutoDiffCostFunction<ReprojectionCostFunctor, 2, 2, 3, 1>(
               new ReprojectionCostFunctor(p_2d, p_3d, cam_model));
-      problem.AddResidualBlock(cost_function, NULL, );
+      problem.AddResidualBlock(cost_function, NULL,
+                               vec_T_w_i[kv.first.cam_id].data(),
+                               calib_cam.T_i_c[kv.first.cam_id].data(),
+                               calib_cam.intrinsics[kv.first.cam_id]->data());
     }
   }
   // given:
