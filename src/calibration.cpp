@@ -388,13 +388,15 @@ void optimize() {
   for (auto& T_i_c : calib_cam.T_i_c) {
     problem.AddParameterBlock(T_i_c.data(), T_i_c.num_parameters,
                               new Sophus::test::LocalParameterizationSE3);
-    // disable optimization over T_i_c
-    problem.SetParameterBlockConstant(T_i_c.data());
   }
 
   // for every image
   for (const auto& kv : calib_corners) {
     // for every detected corners in the image
+    // disable optimization over T_i_c
+    if (kv.first.cam_id == 0) {
+      problem.SetParameterBlockConstant(calib_cam.T_i_c[0].data());
+    }
     for (size_t i = 0; i < kv.second.corners.size(); i++) {
       // 3D points
       Eigen::Vector3d p_3d =
