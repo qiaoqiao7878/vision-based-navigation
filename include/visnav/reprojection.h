@@ -63,15 +63,6 @@ struct ReprojectionCostFunctor {
 
     // TODO SHEET 2: implement the rest of the functor
 
-    // Error: ‘const class std::shared_ptr<visnav::AbstractCamera<double> >’ has
-    // no member named ‘project’
-
-    // Should I use .project() function in AbstractCamera class to get 2D point
-    // from 3D point here?
-
-    // How can I call it?
-
-    // The inverse() doesn't work,too.
     residuals = p_2d - cam->project(T_i_c.inverse() * T_w_i.inverse() * p_3d);
 
     // given:

@@ -373,41 +373,41 @@ void optimize() {
   ceres::Problem problem;
 
   // TODO SHEET 2: setup optimization problem
-
+  // Sophus::test::LocalParameterizationSE3* localSE3 =
+  //    new Sophus::test::LocalParameterizationSE3[calib_corners.size()];
+  Sophus::test::LocalParameterizationSE3* localSE3 =
+      new Sophus::test::LocalParameterizationSE3;
   for (const auto& kv : calib_corners) {
+    Sophus::SE3d T_w_i = vec_T_w_i[kv.first.t_ns];
+    // problem.AddParameterBlock(T_w_i.data(), T_w_i.num_parameters,
+    //                          new Sophus::test::LocalParameterizationSE3);
+    // problem.AddParameterBlock(T_w_i.data(), T_w_i.num_parameters,
+    //                         &localSE3[kv.first.t_ns]);
+    problem.AddParameterBlock(T_w_i.data(), T_w_i.num_parameters, localSE3);
+    problem.AddParameterBlock(calib_cam.T_i_c[kv.first.cam_id].data(),
+                              calib_cam.T_i_c[kv.first.cam_id].num_parameters);
+    problem.SetParameterBlockConstant(calib_cam.T_i_c[kv.first.cam_id].data());
+    // use maximum number 8
+    problem.AddParameterBlock(calib_cam.intrinsics[kv.first.cam_id]->data(), 8);
     for (size_t i = 0; i < kv.second.corners.size(); i++) {
-      problem.AddParameterBlock(vec_T_w_i[kv.first.cam_id].data(),
-                                vec_T_w_i[kv.first.cam_id].num_parameters,
-                                new Sophus::test::LocalParameterizationSE3);
-
-      problem.AddParameterBlock(
-          calib_cam.T_i_c[kv.first.cam_id].data(),
-          calib_cam.T_i_c[kv.first.cam_id].num_parameters);
-
-      // use maximum number 8
-      problem.AddParameterBlock(calib_cam.intrinsics[kv.first.cam_id]->data(),
-                                8);
       Eigen::Vector3d p_3d =
           aprilgrid.aprilgrid_corner_pos_3d[kv.second.corner_ids[i]];
       // detected 2D points
       Eigen::Vector2d p_2d = kv.second.corners[kv.second.corner_ids[i]];
 
-      // dimension of residual,p_2d,p_3d,cam_model
+      // dimension of residual,vec_T_w_i,T_i_c,intrinsics
 
       // cam_model is a string
       ReprojectionCostFunctor* c =
           new ReprojectionCostFunctor(p_2d, p_3d, cam_model);
 
       ceres::CostFunction* cost_function =
-          new ceres::AutoDiffCostFunction<ReprojectionCostFunctor, 2, 2, 3, 1>(
+          new ceres::AutoDiffCostFunction<ReprojectionCostFunctor, 2, 7, 7, 8>(
               c);
 
-      problem.AddResidualBlock(cost_function, NULL,
-                               vec_T_w_i[kv.first.cam_id].data(),
+      problem.AddResidualBlock(cost_function, NULL, T_w_i.data(),
                                calib_cam.T_i_c[kv.first.cam_id].data(),
                                calib_cam.intrinsics[kv.first.cam_id]->data());
-      problem.SetParameterBlockConstant(
-          calib_cam.T_i_c[kv.first.cam_id].data());
     }
   }
 
