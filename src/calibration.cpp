@@ -380,31 +380,37 @@ void optimize() {
                                 vec_T_w_i[kv.first.cam_id].num_parameters,
                                 new Sophus::test::LocalParameterizationSE3);
 
-      problem.AddParameterBlock(calib_cam.T_i_c[kv.first.cam_id].data(),
-                                calib_cam.T_i_c[kv.first.cam_id].num_parameters,
-                                new Sophus::test::LocalParameterizationSE3);
-      problem.SetParameterBlockConstant(
-          calib_cam.T_i_c[kv.first.cam_id].data());
-
       problem.AddParameterBlock(
-          calib_cam.intrinsics[kv.first.cam_id]->data(),
-          calib_cam.intrinsics[kv.first.cam_id]->getParam().size());
+          calib_cam.T_i_c[kv.first.cam_id].data(),
+          calib_cam.T_i_c[kv.first.cam_id].num_parameters);
+
+      // use maximum number 8
+      problem.AddParameterBlock(calib_cam.intrinsics[kv.first.cam_id]->data(),
+                                8);
       Eigen::Vector3d p_3d =
           aprilgrid.aprilgrid_corner_pos_3d[kv.second.corner_ids[i]];
       // detected 2D points
       Eigen::Vector2d p_2d = kv.second.corners[kv.second.corner_ids[i]];
 
-      // dimension of residual,p_2d,p_3d,intrinsics
-      // How can I write the dimension of intrinsics here?
+      // dimension of residual,p_2d,p_3d,cam_model
+
+      // cam_model is a string
+      ReprojectionCostFunctor* c =
+          new ReprojectionCostFunctor(p_2d, p_3d, cam_model);
+
       ceres::CostFunction* cost_function =
           new ceres::AutoDiffCostFunction<ReprojectionCostFunctor, 2, 2, 3, 1>(
-              new ReprojectionCostFunctor(p_2d, p_3d, cam_model));
+              c);
+
       problem.AddResidualBlock(cost_function, NULL,
                                vec_T_w_i[kv.first.cam_id].data(),
                                calib_cam.T_i_c[kv.first.cam_id].data(),
                                calib_cam.intrinsics[kv.first.cam_id]->data());
+      problem.SetParameterBlockConstant(
+          calib_cam.T_i_c[kv.first.cam_id].data());
     }
   }
+
   // given:
   ceres::Solver::Options options;
   options.gradient_tolerance = 0.01 * Sophus::Constants<double>::epsilon();

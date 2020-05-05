@@ -72,7 +72,7 @@ struct ReprojectionCostFunctor {
     // How can I call it?
 
     // The inverse() doesn't work,too.
-    residuals = p_2d - cam.project(T_i_c.inverse() * T_w_i.inverse() * p_3d);
+    residuals = p_2d - cam->project(T_i_c.inverse() * T_w_i.inverse() * p_3d);
 
     // given:
     return true;
