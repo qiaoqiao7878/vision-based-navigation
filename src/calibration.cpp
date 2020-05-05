@@ -373,29 +373,36 @@ void optimize() {
   ceres::Problem problem;
 
   // TODO SHEET 2: setup optimization problem
-  // Sophus::test::LocalParameterizationSE3* localSE3 =
-  //    new Sophus::test::LocalParameterizationSE3[calib_corners.size()];
-  Sophus::test::LocalParameterizationSE3* localSE3 =
-      new Sophus::test::LocalParameterizationSE3;
+
+  // Adding parameter vec_T_w_i
+  for (auto& vec : vec_T_w_i) {
+    problem.AddParameterBlock(vec.data(), vec.num_parameters,
+                              new Sophus::test::LocalParameterizationSE3);
+  }
+
+  // adding intrinsics parameters use maximum number 8
+  for (auto& intr : calib_cam.intrinsics) {
+    problem.AddParameterBlock(intr->data(), 8);
+  }
+
+  for (auto& T_i_c : calib_cam.T_i_c) {
+    problem.AddParameterBlock(T_i_c.data(), T_i_c.num_parameters,
+                              new Sophus::test::LocalParameterizationSE3);
+    // disable optimization over T_i_c
+    problem.SetParameterBlockConstant(T_i_c.data());
+  }
+
+  // for every image
   for (const auto& kv : calib_corners) {
-    Sophus::SE3d T_w_i = vec_T_w_i[kv.first.t_ns];
-    // problem.AddParameterBlock(T_w_i.data(), T_w_i.num_parameters,
-    //                          new Sophus::test::LocalParameterizationSE3);
-    // problem.AddParameterBlock(T_w_i.data(), T_w_i.num_parameters,
-    //                         &localSE3[kv.first.t_ns]);
-    problem.AddParameterBlock(T_w_i.data(), T_w_i.num_parameters, localSE3);
-    problem.AddParameterBlock(calib_cam.T_i_c[kv.first.cam_id].data(),
-                              calib_cam.T_i_c[kv.first.cam_id].num_parameters);
-    problem.SetParameterBlockConstant(calib_cam.T_i_c[kv.first.cam_id].data());
-    // use maximum number 8
-    problem.AddParameterBlock(calib_cam.intrinsics[kv.first.cam_id]->data(), 8);
+    // for every detected corners in the image
     for (size_t i = 0; i < kv.second.corners.size(); i++) {
+      // 3D points
       Eigen::Vector3d p_3d =
           aprilgrid.aprilgrid_corner_pos_3d[kv.second.corner_ids[i]];
       // detected 2D points
-      Eigen::Vector2d p_2d = kv.second.corners[kv.second.corner_ids[i]];
+      Eigen::Vector2d p_2d = kv.second.corners[i];
 
-      // dimension of residual,vec_T_w_i,T_i_c,intrinsics
+      // dimension of residual:2,vec_T_w_i:7,T_i_c:7,intrinsics:8
 
       // cam_model is a string
       ReprojectionCostFunctor* c =
@@ -405,7 +412,10 @@ void optimize() {
           new ceres::AutoDiffCostFunction<ReprojectionCostFunctor, 2, 7, 7, 8>(
               c);
 
-      problem.AddResidualBlock(cost_function, NULL, T_w_i.data(),
+      // vec_T_w_i at this timestep,T_i_c of this camera, intrinsics of this
+      // camera
+      problem.AddResidualBlock(cost_function, NULL,
+                               vec_T_w_i[kv.first.t_ns].data(),
                                calib_cam.T_i_c[kv.first.cam_id].data(),
                                calib_cam.intrinsics[kv.first.cam_id]->data());
     }
