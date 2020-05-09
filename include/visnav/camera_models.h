@@ -459,9 +459,6 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
           (i > 5)) {
         break;
       }
-      if (i > 10) {
-        break;
-      }
     }
 
     theta_star = theta;
