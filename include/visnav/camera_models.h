@@ -458,9 +458,9 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
             r_u) < 1e-10) and
           (i > 5)) {
         break;
-        if (i > 10) {
-          break;
-        }
+      }
+      if (i > 10) {
+        break;
       }
     }
 
