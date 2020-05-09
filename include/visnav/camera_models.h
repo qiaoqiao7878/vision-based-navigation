@@ -433,38 +433,49 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
     Scalar theta_star;
     Scalar theta = Scalar(0);
     int i = 0;
-    while (true) {
-      i++;
-      theta =
-          theta -
-          (theta * (Scalar(1) +
-                    theta * theta *
-                        (k1 + theta * theta *
-                                  (k2 + theta * theta *
-                                            (k3 + k4 * theta * theta)))) -
-           r_u) /
-              (Scalar(1) + theta * theta *
-                               (Scalar(3) * k1 +
-                                theta * theta *
-                                    (Scalar(5) * k2 +
-                                     theta * theta *
-                                         (Scalar(7) * k3 +
-                                          Scalar(9) * k4 * theta * theta))));
-      if (((theta * (Scalar(1) +
-                     theta * theta *
-                         (k1 + theta * theta *
-                                   (k2 + theta * theta *
-                                             (k3 + k4 * theta * theta)))) -
-            r_u) < 1e-10) and
-          (i > 5)) {
-        break;
+    if (r_u < 1e-7) {
+      theta = Scalar(0);
+    } else {
+      while (true) {
+        i++;
+        theta =
+            theta -
+            (theta * (Scalar(1) +
+                      theta * theta *
+                          (k1 + theta * theta *
+                                    (k2 + theta * theta *
+                                              (k3 + k4 * theta * theta)))) -
+             r_u) /
+                (Scalar(1) + theta * theta *
+                                 (Scalar(3) * k1 +
+                                  theta * theta *
+                                      (Scalar(5) * k2 +
+                                       theta * theta *
+                                           (Scalar(7) * k3 +
+                                            Scalar(9) * k4 * theta * theta))));
+        if (((theta * (Scalar(1) +
+                       theta * theta *
+                           (k1 + theta * theta *
+                                     (k2 + theta * theta *
+                                               (k3 + k4 * theta * theta)))) -
+              r_u) < 1e-10) and
+            (i > 5)) {
+          break;
+        }
       }
     }
 
     theta_star = theta;
-    res[0] = sin(theta_star) * (mx / r_u);
-    res[1] = sin(theta_star) * (my / r_u);
-    res[2] = cos(theta_star);
+    if (theta_star < 1e-7) {
+      res[0] = Scalar(0);
+      res[1] = Scalar(0);
+      res[2] = Scalar(1);
+
+    } else {
+      res[0] = sin(theta_star) * (mx / r_u);
+      res[1] = sin(theta_star) * (my / r_u);
+      res[2] = cos(theta_star);
+    }
 
     UNUSED(p);
     UNUSED(fx);
