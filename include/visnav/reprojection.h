@@ -63,6 +63,9 @@ struct ReprojectionCostFunctor {
 
     // TODO SHEET 2: implement the rest of the functor
 
+    residuals = p_2d - cam->project(T_i_c.inverse() * T_w_i.inverse() * p_3d);
+
+    // given:
     return true;
   }
 

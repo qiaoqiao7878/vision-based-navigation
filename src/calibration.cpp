@@ -345,11 +345,22 @@ void compute_projections() {
       Eigen::Vector3d p_3d = aprilgrid.aprilgrid_corner_pos_3d[i];
 
       // TODO SHEET 2: project point
+      Eigen::Vector3d point_in_image_frame;
+
+      // convert the 3D point from world frame to image frame
+      point_in_image_frame = T_i_c.inverse() * T_w_i.inverse() * p_3d;
+
+      // given
       UNUSED(T_w_i);
       UNUSED(T_i_c);
       UNUSED(p_3d);
       Eigen::Vector2d p_2d;
 
+      // propect into 2D
+      p_2d =
+          calib_cam.intrinsics[kv.first.cam_id]->project(point_in_image_frame);
+
+      // given
       ccd.corners.push_back(p_2d);
     }
 
@@ -363,6 +374,56 @@ void optimize() {
 
   // TODO SHEET 2: setup optimization problem
 
+  // Adding parameter vec_T_w_i
+  for (auto& vec : vec_T_w_i) {
+    problem.AddParameterBlock(vec.data(), vec.num_parameters,
+                              new Sophus::test::LocalParameterizationSE3);
+  }
+
+  // adding intrinsics parameters use maximum number 8
+  for (auto& intr : calib_cam.intrinsics) {
+    problem.AddParameterBlock(intr->data(), 8);
+  }
+
+  for (auto& T_i_c : calib_cam.T_i_c) {
+    problem.AddParameterBlock(T_i_c.data(), T_i_c.num_parameters,
+                              new Sophus::test::LocalParameterizationSE3);
+  }
+
+  // for every image
+  for (const auto& kv : calib_corners) {
+    // for every detected corners in the image
+    // disable optimization over T_i_c
+    if (kv.first.cam_id == 0) {
+      problem.SetParameterBlockConstant(calib_cam.T_i_c[0].data());
+    }
+    for (size_t i = 0; i < kv.second.corners.size(); i++) {
+      // 3D points
+      Eigen::Vector3d p_3d =
+          aprilgrid.aprilgrid_corner_pos_3d[kv.second.corner_ids[i]];
+      // detected 2D points
+      Eigen::Vector2d p_2d = kv.second.corners[i];
+
+      // dimension of residual:2,vec_T_w_i:7,T_i_c:7,intrinsics:8
+
+      // cam_model is a string
+      ReprojectionCostFunctor* c =
+          new ReprojectionCostFunctor(p_2d, p_3d, cam_model);
+
+      ceres::CostFunction* cost_function =
+          new ceres::AutoDiffCostFunction<ReprojectionCostFunctor, 2, 7, 7, 8>(
+              c);
+
+      // vec_T_w_i at this timestep,T_i_c of this camera, intrinsics of this
+      // camera
+      problem.AddResidualBlock(cost_function, NULL,
+                               vec_T_w_i[kv.first.t_ns].data(),
+                               calib_cam.T_i_c[kv.first.cam_id].data(),
+                               calib_cam.intrinsics[kv.first.cam_id]->data());
+    }
+  }
+
+  // given:
   ceres::Solver::Options options;
   options.gradient_tolerance = 0.01 * Sophus::Constants<double>::epsilon();
   options.function_tolerance = 0.01 * Sophus::Constants<double>::epsilon();

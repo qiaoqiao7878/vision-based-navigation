@@ -86,6 +86,8 @@ class PinholeCamera : public AbstractCamera<Scalar> {
     Vec2 res;
 
     // TODO SHEET 2: implement camera model
+    res[0] = fx * x / z + cx;
+    res[1] = fy * y / z + cy;
     UNUSED(fx);
     UNUSED(fy);
     UNUSED(cx);
@@ -106,6 +108,12 @@ class PinholeCamera : public AbstractCamera<Scalar> {
     Vec3 res;
 
     // TODO SHEET 2: implement camera model
+    Scalar mx;
+    Scalar my;
+    mx = (p[0] - cx) / fx;
+    my = (p[1] - cy) / fy;
+    res << mx, my, Scalar(1);
+    res = res / sqrt(mx * mx + my * my + Scalar(1));
     UNUSED(p);
     UNUSED(fx);
     UNUSED(fy);
@@ -170,6 +178,11 @@ class ExtendedUnifiedCamera : public AbstractCamera<Scalar> {
     Vec2 res;
 
     // TODO SHEET 2: implement camera model
+    Scalar d;
+    d = sqrt(beta * (x * x + y * y) + z * z);
+    res[0] = fx * x / (alpha * d + (Scalar(1) - alpha) * z) + cx;
+    res[1] = fy * y / (alpha * d + (Scalar(1) - alpha) * z) + cy;
+
     UNUSED(fx);
     UNUSED(fy);
     UNUSED(cx);
@@ -194,6 +207,15 @@ class ExtendedUnifiedCamera : public AbstractCamera<Scalar> {
     Vec3 res;
 
     // TODO SHEET 2: implement camera model
+    Scalar mx = (p[0] - cx) / fx;
+    Scalar my = (p[1] - cy) / fy;
+    Scalar r_square = mx * mx + my * my;
+    Scalar mz = (Scalar(1) - beta * alpha * alpha * r_square) /
+                (alpha * sqrt(Scalar(1) - (Scalar(2) * alpha - Scalar(1)) *
+                                              beta * r_square) +
+                 (Scalar(1) - alpha));
+    res << mx, my, mz;
+    res = res / sqrt(mx * mx + my * my + mz * mz);
     UNUSED(p);
     UNUSED(fx);
     UNUSED(fy);
@@ -256,6 +278,11 @@ class DoubleSphereCamera : public AbstractCamera<Scalar> {
     Vec2 res;
 
     // TODO SHEET 2: implement camera model
+    Scalar d1 = sqrt(x * x + y * y + z * z);
+    Scalar d2 = sqrt(x * x + y * y + (xi * d1 + z) * (xi * d1 + z));
+    res[0] = fx * x / (alpha * d2 + (Scalar(1) - alpha) * (xi * d1 + z)) + cx;
+    res[1] = fy * y / (alpha * d2 + (Scalar(1) - alpha) * (xi * d1 + z)) + cy;
+
     UNUSED(fx);
     UNUSED(fy);
     UNUSED(cx);
@@ -280,6 +307,17 @@ class DoubleSphereCamera : public AbstractCamera<Scalar> {
     Vec3 res;
 
     // TODO SHEET 2: implement camera model
+    Scalar mx = (p[0] - cx) / fx;
+    Scalar my = (p[1] - cy) / fy;
+    Scalar r_square = mx * mx + my * my;
+    Scalar mz =
+        (Scalar(1) - alpha * alpha * r_square) /
+        (alpha * sqrt(Scalar(1) - (Scalar(2) * alpha - Scalar(1)) * r_square) +
+         Scalar(1) - alpha);
+    res << mx, my, mz;
+    res = res * ((mz * xi + sqrt(mz * mz + (Scalar(1) - xi * xi) * r_square)) /
+                 (mz * mz + r_square));
+    res[2] = res[2] - xi;
     UNUSED(p);
     UNUSED(fx);
     UNUSED(fy);
@@ -341,10 +379,28 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
     const Scalar& x = p[0];
     const Scalar& y = p[1];
     const Scalar& z = p[2];
-
     Vec2 res;
 
     // TODO SHEET 2: implement camera model
+
+    Scalar r = sqrt(x * x + y * y);
+    Scalar theta = atan2(r, z);
+    /*Scalar d_theta = theta + k1 * pow(theta, 3) + k2 * pow(theta, 5) +
+                     k3 * pow(theta, 7) + k4 * pow(theta, 9);*/
+    Scalar d_theta =
+        theta *
+        (Scalar(1) +
+         theta * theta *
+             (k1 + theta * theta *
+                       (k2 + theta * theta * (k3 + k4 * theta * theta))));
+    if (r < 1e-7) {
+      res[0] = cx;
+      res[1] = cy;
+
+    } else {
+      res[0] = fx * d_theta * (x / r) + cx;
+      res[1] = fy * d_theta * (y / r) + cy;
+    }
     UNUSED(fx);
     UNUSED(fy);
     UNUSED(cx);
@@ -369,6 +425,62 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
     Vec3 res;
 
     // TODO SHEET 2: implement camera model
+    const Scalar& k1 = param[4];
+    const Scalar& k2 = param[5];
+    const Scalar& k3 = param[6];
+    const Scalar& k4 = param[7];
+    Scalar mx = (p[0] - cx) / fx;
+    Scalar my = (p[1] - cy) / fy;
+    Scalar r_u = sqrt(mx * mx + my * my);
+    // undoned
+    Scalar theta_star;
+    Scalar theta = Scalar(0);
+    int i = 0;
+
+    while (true) {
+      i++;
+      theta =
+          theta -
+          (theta * (Scalar(1) +
+                    theta * theta *
+                        (k1 + theta * theta *
+                                  (k2 + theta * theta *
+                                            (k3 + k4 * theta * theta)))) -
+           r_u) /
+              (Scalar(1) + theta * theta *
+                               (Scalar(3) * k1 +
+                                theta * theta *
+                                    (Scalar(5) * k2 +
+                                     theta * theta *
+                                         (Scalar(7) * k3 +
+                                          Scalar(9) * k4 * theta * theta))));
+      if (((theta * (Scalar(1) +
+                     theta * theta *
+                         (k1 + theta * theta *
+                                   (k2 + theta * theta *
+                                             (k3 + k4 * theta * theta)))) -
+            r_u) < 1e-10) and
+          (i > 5)) {
+        break;
+      }
+      if (i > 10) {
+        break;
+      }
+    }
+
+    theta_star = theta;
+
+    if (r_u < 1e-7) {
+      res[0] = Scalar(0);
+      res[1] = Scalar(0);
+      res[2] = Scalar(1);
+
+    } else {
+      res[0] = sin(theta_star) * (mx / r_u);
+      res[1] = sin(theta_star) * (my / r_u);
+      res[2] = cos(theta_star);
+    }
+
     UNUSED(p);
     UNUSED(fx);
     UNUSED(fy);
