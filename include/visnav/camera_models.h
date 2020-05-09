@@ -455,9 +455,12 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
                          (k1 + theta * theta *
                                    (k2 + theta * theta *
                                              (k3 + k4 * theta * theta)))) -
-            r_u) < 1e-30) and
-          (i > 7)) {
+            r_u) < 1e-10) and
+          (i > 5)) {
         break;
+        if (i > 10) {
+          break;
+        }
       }
     }
 
