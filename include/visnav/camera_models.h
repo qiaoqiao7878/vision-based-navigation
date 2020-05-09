@@ -385,7 +385,6 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
 
     Scalar r = sqrt(x * x + y * y);
     Scalar theta = atan2(r, z);
-
     /*Scalar d_theta = theta + k1 * pow(theta, 3) + k2 * pow(theta, 5) +
                      k3 * pow(theta, 7) + k4 * pow(theta, 9);*/
     Scalar d_theta =
@@ -394,10 +393,14 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
          theta * theta *
              (k1 + theta * theta *
                        (k2 + theta * theta * (k3 + k4 * theta * theta))));
+    if (r < 1e-7) {
+      res[0] = cx;
+      res[1] = cy;
 
-    res[0] = fx * d_theta * (x / r) + cx;
-    res[1] = fy * d_theta * (y / r) + cy;
-
+    } else {
+      res[0] = fx * d_theta * (x / r) + cx;
+      res[1] = fy * d_theta * (y / r) + cy;
+    }
     UNUSED(fx);
     UNUSED(fy);
     UNUSED(cx);
@@ -433,40 +436,41 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
     Scalar theta_star;
     Scalar theta = Scalar(0);
     int i = 0;
-    if (r_u < 1e-7) {
-      theta = Scalar(0);
-    } else {
-      while (true) {
-        i++;
-        theta =
-            theta -
-            (theta * (Scalar(1) +
-                      theta * theta *
-                          (k1 + theta * theta *
-                                    (k2 + theta * theta *
-                                              (k3 + k4 * theta * theta)))) -
-             r_u) /
-                (Scalar(1) + theta * theta *
-                                 (Scalar(3) * k1 +
-                                  theta * theta *
-                                      (Scalar(5) * k2 +
-                                       theta * theta *
-                                           (Scalar(7) * k3 +
-                                            Scalar(9) * k4 * theta * theta))));
-        if (((theta * (Scalar(1) +
-                       theta * theta *
-                           (k1 + theta * theta *
-                                     (k2 + theta * theta *
-                                               (k3 + k4 * theta * theta)))) -
-              r_u) < 1e-10) and
-            (i > 5)) {
-          break;
-        }
+
+    while (true) {
+      i++;
+      theta =
+          theta -
+          (theta * (Scalar(1) +
+                    theta * theta *
+                        (k1 + theta * theta *
+                                  (k2 + theta * theta *
+                                            (k3 + k4 * theta * theta)))) -
+           r_u) /
+              (Scalar(1) + theta * theta *
+                               (Scalar(3) * k1 +
+                                theta * theta *
+                                    (Scalar(5) * k2 +
+                                     theta * theta *
+                                         (Scalar(7) * k3 +
+                                          Scalar(9) * k4 * theta * theta))));
+      if (((theta * (Scalar(1) +
+                     theta * theta *
+                         (k1 + theta * theta *
+                                   (k2 + theta * theta *
+                                             (k3 + k4 * theta * theta)))) -
+            r_u) < 1e-10) and
+          (i > 5)) {
+        break;
+      }
+      if (i > 10) {
+        break;
       }
     }
 
     theta_star = theta;
-    if (theta_star < 1e-7) {
+
+    if (r_u < 1e-7) {
       res[0] = Scalar(0);
       res[1] = Scalar(0);
       res[2] = Scalar(1);
