@@ -112,8 +112,8 @@ class PinholeCamera : public AbstractCamera<Scalar> {
     Scalar my;
     mx = (p[0] - cx) / fx;
     my = (p[1] - cy) / fy;
-    res << mx, my, 1;
-    res = res / sqrt(mx * mx + my * my + 1);
+    res << mx, my, Scalar(1);
+    res = res / sqrt(mx * mx + my * my + Scalar(1));
     UNUSED(p);
     UNUSED(fx);
     UNUSED(fy);
@@ -180,8 +180,8 @@ class ExtendedUnifiedCamera : public AbstractCamera<Scalar> {
     // TODO SHEET 2: implement camera model
     Scalar d;
     d = sqrt(beta * (x * x + y * y) + z * z);
-    res[0] = fx * x / (alpha * d + (1 - alpha) * z) + cx;
-    res[1] = fy * y / (alpha * d + (1 - alpha) * z) + cy;
+    res[0] = fx * x / (alpha * d + (Scalar(1) - alpha) * z) + cx;
+    res[1] = fy * y / (alpha * d + (Scalar(1) - alpha) * z) + cy;
 
     UNUSED(fx);
     UNUSED(fy);
@@ -210,9 +210,10 @@ class ExtendedUnifiedCamera : public AbstractCamera<Scalar> {
     Scalar mx = (p[0] - cx) / fx;
     Scalar my = (p[1] - cy) / fy;
     Scalar r_square = mx * mx + my * my;
-    Scalar mz =
-        (1 - beta * alpha * alpha * r_square) /
-        (alpha * sqrt(1 - (2 * alpha - 1) * beta * r_square) + (1 - alpha));
+    Scalar mz = (Scalar(1) - beta * alpha * alpha * r_square) /
+                (alpha * sqrt(Scalar(1) - (Scalar(2) * alpha - Scalar(1)) *
+                                              beta * r_square) +
+                 (Scalar(1) - alpha));
     res << mx, my, mz;
     res = res / sqrt(mx * mx + my * my + mz * mz);
     UNUSED(p);
@@ -279,8 +280,8 @@ class DoubleSphereCamera : public AbstractCamera<Scalar> {
     // TODO SHEET 2: implement camera model
     Scalar d1 = sqrt(x * x + y * y + z * z);
     Scalar d2 = sqrt(x * x + y * y + (xi * d1 + z) * (xi * d1 + z));
-    res[0] = fx * x / (alpha * d2 + (1 - alpha) * (xi * d1 + z)) + cx;
-    res[1] = fy * y / (alpha * d2 + (1 - alpha) * (xi * d1 + z)) + cy;
+    res[0] = fx * x / (alpha * d2 + (Scalar(1) - alpha) * (xi * d1 + z)) + cx;
+    res[1] = fy * y / (alpha * d2 + (Scalar(1) - alpha) * (xi * d1 + z)) + cy;
 
     UNUSED(fx);
     UNUSED(fy);
@@ -309,10 +310,12 @@ class DoubleSphereCamera : public AbstractCamera<Scalar> {
     Scalar mx = (p[0] - cx) / fx;
     Scalar my = (p[1] - cy) / fy;
     Scalar r_square = mx * mx + my * my;
-    Scalar mz = (1 - alpha * alpha * r_square) /
-                (alpha * sqrt(1 - (2 * alpha - 1) * r_square) + 1 - alpha);
+    Scalar mz =
+        (Scalar(1) - alpha * alpha * r_square) /
+        (alpha * sqrt(Scalar(1) - (Scalar(2) * alpha - Scalar(1)) * r_square) +
+         Scalar(1) - alpha);
     res << mx, my, mz;
-    res = res * ((mz * xi + sqrt(mz * mz + (1 - xi * xi) * r_square)) /
+    res = res * ((mz * xi + sqrt(mz * mz + (Scalar(1) - xi * xi) * r_square)) /
                  (mz * mz + r_square));
     res[2] = res[2] - xi;
     UNUSED(p);
@@ -387,9 +390,10 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
                      k3 * pow(theta, 7) + k4 * pow(theta, 9);*/
     Scalar d_theta =
         theta *
-        (1 + theta * theta *
-                 (k1 + theta * theta *
-                           (k2 + theta * theta * (k3 + k4 * theta * theta))));
+        (Scalar(1) +
+         theta * theta *
+             (k1 + theta * theta *
+                       (k2 + theta * theta * (k3 + k4 * theta * theta))));
 
     res[0] = fx * d_theta * (x / r) + cx;
     res[1] = fy * d_theta * (y / r) + cy;
@@ -427,29 +431,36 @@ class KannalaBrandt4Camera : public AbstractCamera<Scalar> {
     Scalar r_u = sqrt(mx * mx + my * my);
     // undoned
     Scalar theta_star;
-    Scalar theta = 0;
+    Scalar theta = Scalar(0);
     int i = 0;
     while (true) {
       i++;
       theta =
           theta -
-          (theta * (1 + theta * theta *
-                            (k1 + theta * theta *
-                                      (k2 + theta * theta *
-                                                (k3 + k4 * theta * theta)))) -
+          (theta * (Scalar(1) +
+                    theta * theta *
+                        (k1 + theta * theta *
+                                  (k2 + theta * theta *
+                                            (k3 + k4 * theta * theta)))) -
            r_u) /
-              (1 + theta * theta *
-                       (3 * k1 +
-                        theta * theta *
-                            (5 * k2 + theta * theta *
-                                          (7 * k3 + 9 * k4 * theta * theta))));
-      if (((theta * (1 + theta * theta *
-                             (k1 + theta * theta *
-                                       (k2 + theta * theta *
-                                                 (k3 + k4 * theta * theta)))) -
-            r_u) < 1e-40) and
+              (Scalar(1) + theta * theta *
+                               (Scalar(3) * k1 +
+                                theta * theta *
+                                    (Scalar(5) * k2 +
+                                     theta * theta *
+                                         (Scalar(7) * k3 +
+                                          Scalar(9) * k4 * theta * theta))));
+      if (((theta * (Scalar(1) +
+                     theta * theta *
+                         (k1 + theta * theta *
+                                   (k2 + theta * theta *
+                                             (k3 + k4 * theta * theta)))) -
+            r_u) < 1e-10) and
           (i > 5)) {
         break;
+        if (i > 10) {
+          break;
+        }
       }
     }
 

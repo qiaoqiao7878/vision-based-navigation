@@ -374,37 +374,55 @@ void optimize() {
 
   // TODO SHEET 2: setup optimization problem
 
+  // Adding parameter vec_T_w_i
+  for (auto& vec : vec_T_w_i) {
+    problem.AddParameterBlock(vec.data(), vec.num_parameters,
+                              new Sophus::test::LocalParameterizationSE3);
+  }
+
+  // adding intrinsics parameters use maximum number 8
+  for (auto& intr : calib_cam.intrinsics) {
+    problem.AddParameterBlock(intr->data(), 8);
+  }
+
+  for (auto& T_i_c : calib_cam.T_i_c) {
+    problem.AddParameterBlock(T_i_c.data(), T_i_c.num_parameters,
+                              new Sophus::test::LocalParameterizationSE3);
+  }
+
+  // for every image
   for (const auto& kv : calib_corners) {
+    // for every detected corners in the image
+    // disable optimization over T_i_c
+    if (kv.first.cam_id == 0) {
+      problem.SetParameterBlockConstant(calib_cam.T_i_c[0].data());
+    }
     for (size_t i = 0; i < kv.second.corners.size(); i++) {
-      problem.AddParameterBlock(vec_T_w_i[kv.first.cam_id].data(),
-                                vec_T_w_i[kv.first.cam_id].num_parameters,
-                                new Sophus::test::LocalParameterizationSE3);
-
-      problem.AddParameterBlock(calib_cam.T_i_c[kv.first.cam_id].data(),
-                                calib_cam.T_i_c[kv.first.cam_id].num_parameters,
-                                new Sophus::test::LocalParameterizationSE3);
-      problem.SetParameterBlockConstant(
-          calib_cam.T_i_c[kv.first.cam_id].data());
-
-      problem.AddParameterBlock(
-          calib_cam.intrinsics[kv.first.cam_id]->data(),
-          calib_cam.intrinsics[kv.first.cam_id]->getParam().size());
+      // 3D points
       Eigen::Vector3d p_3d =
           aprilgrid.aprilgrid_corner_pos_3d[kv.second.corner_ids[i]];
       // detected 2D points
-      Eigen::Vector2d p_2d = kv.second.corners[kv.second.corner_ids[i]];
+      Eigen::Vector2d p_2d = kv.second.corners[i];
 
-      // dimension of residual,p_2d,p_3d,intrinsics
-      // How can I write the dimension of intrinsics here?
+      // dimension of residual:2,vec_T_w_i:7,T_i_c:7,intrinsics:8
+
+      // cam_model is a string
+      ReprojectionCostFunctor* c =
+          new ReprojectionCostFunctor(p_2d, p_3d, cam_model);
+
       ceres::CostFunction* cost_function =
-          new ceres::AutoDiffCostFunction<ReprojectionCostFunctor, 2, 2, 3, 1>(
-              new ReprojectionCostFunctor(p_2d, p_3d, cam_model));
+          new ceres::AutoDiffCostFunction<ReprojectionCostFunctor, 2, 7, 7, 8>(
+              c);
+
+      // vec_T_w_i at this timestep,T_i_c of this camera, intrinsics of this
+      // camera
       problem.AddResidualBlock(cost_function, NULL,
-                               vec_T_w_i[kv.first.cam_id].data(),
+                               vec_T_w_i[kv.first.t_ns].data(),
                                calib_cam.T_i_c[kv.first.cam_id].data(),
                                calib_cam.intrinsics[kv.first.cam_id]->data());
     }
   }
+
   // given:
   ceres::Solver::Options options;
   options.gradient_tolerance = 0.01 * Sophus::Constants<double>::epsilon();
