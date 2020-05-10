@@ -57,7 +57,7 @@ class BowVocabulary {
   inline void transformFeatureToWord(const TDescriptor &feature,
                                      WordId &word_id, WordValue &weight) const {
     // TODO SHEET 3: propagate feature through the vocabulary tree stored in the
-    // array m_nodes. The root node id=0 (m_nodes[0]). The array
+    // array m_nodes. The root node has id=0 (m_nodes[0]). The array
     // m_nodes[id].children stores ids (index in the array) of the children
     // nodes, m_nodes[id].isLeaf() is true for the leaf nodes.
     // m_nodes[id].descriptor stores the centroid of the node. Start from the
@@ -119,7 +119,7 @@ class BowVocabulary {
   struct Node {
     /// Node id
     NodeId id;
-    /// Weight if the node is a word
+    /// Weight if the node is a word; may be positive or zero
     WordValue weight;
     /// Children
     std::vector<NodeId> children;

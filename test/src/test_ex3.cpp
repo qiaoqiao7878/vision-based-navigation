@@ -504,13 +504,14 @@ TEST(Ex3TestSuite, BowDB) {
     for (const auto& kv : res) {
       db_res.insert(kv.first.t_ns);
     }
-    std::cerr << std::endl;
 
     std::vector<std::pair<int, double>> col_val;
     for (int i = 0; i < N; i++) {
       col_val.emplace_back(i, m(j, i));
     }
 
+    static_assert(num_bow_candidates < N,
+                  "partial sort precondition: size > num_bow_candidates");
     std::partial_sort(
         col_val.begin(), col_val.begin() + num_bow_candidates, col_val.end(),
         [](const auto& a, const auto& b) { return a.second < b.second; });
@@ -520,7 +521,6 @@ TEST(Ex3TestSuite, BowDB) {
     for (const auto& kv : col_val) {
       bf_res.insert(kv.first);
     }
-    std::cerr << std::endl;
 
     // Check that closest bows found by the database and brute force are the
     // same

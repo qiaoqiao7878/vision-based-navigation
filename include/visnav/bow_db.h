@@ -45,15 +45,15 @@ class BowDatabase {
 
   inline void insert(const TimeCamId& tcid, const BowVector& bow_vector) {
     // TODO SHEET 3: add a bow_vector that corresponds to frame tcid to the
-    // inverted index.
+    // inverted index. You can assume the image hasn't been added before.
     UNUSED(tcid);
     UNUSED(bow_vector);
   }
 
   inline void query(const BowVector& bow_vector, size_t num_results,
                     BowQueryResult& results) const {
-    // TODO SHEET 3: find num_results closest matched to the bow_vector in the
-    // inverted index. Hint: for good querry performance use std::unordered_map
+    // TODO SHEET 3: find num_results closest matches to the bow_vector in the
+    // inverted index. Hint: for good query performance use std::unordered_map
     // to accumulate scores and std::partial_sort for getting the closest
     // results. You should use L1 difference as the distance measure. You can
     // assume that BoW descripors are L1 normalized.
@@ -66,7 +66,7 @@ class BowDatabase {
 
  protected:
   tbb::concurrent_unordered_map<
-      WordId, tbb::concurrent_vector<std::pair<TimeCamId, double>>>
+      WordId, tbb::concurrent_vector<std::pair<TimeCamId, WordValue>>>
       inverted_index;
 };
 

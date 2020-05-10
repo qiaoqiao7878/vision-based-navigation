@@ -289,7 +289,8 @@ using WordId = unsigned int;
 /// Value of a word
 using WordValue = double;
 
-/// Normalized sparse vector of words to represent images.
+/// Normalized sparse vector of words to represent images. "Sparse" means that
+/// words with value 0 don't appear explicitly.
 using BowVector = std::vector<std::pair<WordId, WordValue>>;
 
 /// Result of BoW query. Should be sorted by the confidence.

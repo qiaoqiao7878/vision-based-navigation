@@ -84,6 +84,9 @@ Go to `Tools` -> `Options` (`Qt Creator` --> `Preferences` on macOS) and select 
 
 Select `File` as predefined style in the `Clang Format` tab. Also select `None` as the fallback style.
 
+> **Note:** On macOS, it might be that the `clang-format` executable is shown in red font, which means it is not found.
+> Try to enter `/usr/local/bin/clang-format` in the `Clang Format command` field.
+
 <img src="images/ClangFormatConfig.png" width="600" />
 
 ### Build the Project
@@ -100,6 +103,7 @@ cd visnav
 In QtCreator, go to `File` -> `Open File or Project...`, and select the `CMakeLists.txt` file in the top-level folder of the cloned code repository.
 Configure the project with only the `Release with Debug Info` configuration.
 Change the build directory to point to the `build` directory directly inside the top-level folder of the clone repository, i.e. `<your_installation_path>/visnav/build`.
+(Initially, the `build` folder is not there. It will be created on the first build.)
 
 <img src="images/ConfigureProject.png" width="700" />
 
