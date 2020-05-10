@@ -75,7 +75,7 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id);
 void change_display_to_image(const TimeCamId& tcid);
 void draw_scene();
 void load_data(const std::string& path, const std::string& calib_path,
-               int max_images = 0);
+               int max_frames = 0);
 void save_map();
 void load_map();
 void clear_keypoints();
@@ -169,7 +169,7 @@ std::shared_ptr<BowDatabase> bow_db;
 // switching the prefix from "ui" to "hidden" or vice verca. This way you can
 // show only the elements you need / want for development.
 
-pangolin::Var<bool> ui_show_hidden("ui.show_extra_options", false, false, true);
+pangolin::Var<bool> ui_show_hidden("ui.show_extra_options", false, true);
 
 //////////////////////////////////////////////
 /// Image display options
@@ -178,27 +178,25 @@ pangolin::Var<int> show_frame1("ui.show_frame1", 0, 0, 1500);
 pangolin::Var<int> show_cam1("ui.show_cam1", 0, 0, NUM_CAMS - 1);
 pangolin::Var<int> show_frame2("ui.show_frame2", 0, 0, 1500);
 pangolin::Var<int> show_cam2("ui.show_cam2", 1, 0, NUM_CAMS - 1);
-pangolin::Var<bool> lock_frames("ui.lock_frames", true, false, true);
-pangolin::Var<bool> show_detected("ui.show_detected", true, false, true);
-pangolin::Var<bool> show_matches("ui.show_matches", true, false, true);
-pangolin::Var<bool> show_inliers("ui.show_inliers", true, false, true);
-pangolin::Var<bool> show_tracks("ui.show_tracks", true, false, true);
-pangolin::Var<bool> show_reprojections("ui.show_reprojections", true, false,
-                                       true);
+pangolin::Var<bool> lock_frames("ui.lock_frames", true, true);
+pangolin::Var<bool> show_detected("ui.show_detected", true, true);
+pangolin::Var<bool> show_matches("ui.show_matches", true, true);
+pangolin::Var<bool> show_inliers("ui.show_inliers", true, true);
+pangolin::Var<bool> show_tracks("ui.show_tracks", true, true);
+pangolin::Var<bool> show_reprojections("ui.show_reprojections", true, true);
 pangolin::Var<bool> show_outlier_observations("ui.show_outlier_obs", false,
-                                              false, true);
-pangolin::Var<bool> show_ids("ui.show_ids", false, false, true);
-pangolin::Var<bool> show_epipolar("hidden.show_epipolar", false, false, true);
-pangolin::Var<bool> show_cameras3d("hidden.show_cameras", true, false, true);
-pangolin::Var<bool> show_points3d("hidden.show_points", true, false, true);
+                                              true);
+pangolin::Var<bool> show_ids("ui.show_ids", false, true);
+pangolin::Var<bool> show_epipolar("hidden.show_epipolar", false, true);
+pangolin::Var<bool> show_cameras3d("hidden.show_cameras", true, true);
+pangolin::Var<bool> show_points3d("hidden.show_points", true, true);
 
 //////////////////////////////////////////////
 /// Feature extraction and matching options
 
 pangolin::Var<int> num_features_per_image("hidden.num_features", 1500, 10,
                                           5000);
-pangolin::Var<bool> rotate_features("hidden.rotate_features", true, false,
-                                    true);
+pangolin::Var<bool> rotate_features("hidden.rotate_features", true, true);
 pangolin::Var<int> feature_match_max_dist("hidden.match_max_dist", 70, 1, 255);
 pangolin::Var<double> feature_match_test_next_best("hidden.match_next_best",
                                                    1.2, 1, 4);
@@ -207,6 +205,7 @@ pangolin::Var<double> relative_pose_ransac_thresh("hidden.5pt_thresh", 5e-5,
 pangolin::Var<int> relative_pose_ransac_min_inliers("hidden.5pt_min_inlier", 16,
                                                     1, 100);
 
+pangolin::Var<bool> use_match_bow("hidden.use_match_bow", false, true);
 pangolin::Var<int> num_bow_candidates("hidden.num_bow_candidates", 25, 1, 100);
 
 //////////////////////////////////////////////
@@ -230,7 +229,7 @@ pangolin::Var<int> minimal_inlier_max_cameras_to_add("hidden.min_max_cam", 2, 1,
                                                      50);
 
 pangolin::Var<bool> always_add_all_observations("hidden.add_loc_outlier", false,
-                                                false, true);
+                                                true);
 
 pangolin::Var<double> reprojection_error_pnp_inlier_threshold_pixel(
     "hidden.pnp_inlier_thresh", 3.0, 0.1, 10);
@@ -239,7 +238,7 @@ pangolin::Var<double> reprojection_error_pnp_inlier_threshold_pixel(
 /// Bundle Adjustment Options
 
 pangolin::Var<bool> ba_optimize_intrinsics("hidden.ba_opt_intrinsics", false,
-                                           false, true);
+                                           true);
 pangolin::Var<int> ba_verbose("hidden.ba_verbose", 1, 0, 2);
 
 pangolin::Var<double> reprojection_error_huber_pixel("hidden.ba_huber_width",
@@ -266,17 +265,18 @@ pangolin::Var<double> z_coordinate_outlier_threshold_meter("hidden.outlier_z",
 ///////////////////////////////////////////////////////////////////////////////
 
 // if you enable this, a hint for what should be the next step is printed
-pangolin::Var<bool> show_next_step_hint("ui.next_step_hint", false, false,
-                                        true);
+pangolin::Var<bool> show_next_step_hint("ui.next_step_hint", false, true);
 
 // if you enable this, next_step is called repeatedly until completion
-pangolin::Var<bool> continue_next("ui.continue_next", false, false, true);
+pangolin::Var<bool> continue_next("ui.continue_next", false, true);
 
 using Button = pangolin::Var<std::function<void(void)>>;
 
 Button next_step_btn("ui.next_step", &next_step);
 
 Button detect_keypoints_btn("ui.detect_keypoints", &detect_keypoints);
+
+Button clear_matches_btn("ui.clear_matches", &clear_matches);
 
 Button match_stereo_btn("ui.match_stereo", &match_stereo);
 
@@ -884,7 +884,7 @@ void draw_scene() {
 // If max_frames > 0, load at most that many frames (each frame consists of
 // NUM_CAMS images)
 void load_data(const std::string& dataset_path, const std::string& calib_path,
-               const int max_images) {
+               const int max_frames) {
   const std::string timestams_path = dataset_path + "/timestamps.txt";
 
   {
@@ -894,7 +894,7 @@ void load_data(const std::string& dataset_path, const std::string& calib_path,
 
     int id = 0;
 
-    while (times && (max_images <= 0 || id < max_images)) {
+    while (times && (max_frames <= 0 || id < max_frames)) {
       times >> timestamp;
 
       // ensure that we actually read a new timestamp (and not e.g. just newline
@@ -924,7 +924,7 @@ void load_data(const std::string& dataset_path, const std::string& calib_path,
       id++;
     }
 
-    std::cerr << "Loaded " << id << " images " << std::endl;
+    std::cerr << "Loaded " << id << " image pairs" << std::endl;
   }
 
   {
@@ -1115,7 +1115,11 @@ bool next_step() {
 
   if (feature_matches.empty()) {
     match_stereo();
-    match_all();
+    if (use_match_bow) {
+      match_bow();
+    } else {
+      match_all();
+    }
     return true;
   }
 
@@ -1243,7 +1247,9 @@ void match_stereo() {
   }
 
   std::cerr << "Matched " << num_images << " stereo pairs with " << num_inliers
-            << " inlier matches (" << num_matches << " total)." << std::endl;
+            << " inlier feature matches (" << num_matches
+            << " total). New total of matched image pairs is "
+            << feature_matches.size() << "." << std::endl;
 
   {
     std::ofstream os(matches_path, std::ios::binary);
@@ -1269,14 +1275,14 @@ void match_all() {
   std::vector<std::pair<int, int>> ids_to_match;
 
   for (size_t i = 0; i < keys.size(); i++) {
-    for (size_t j = i + 1; j < keys.size(); j++) {
+    for (size_t j = 0; j < i; j++) {
       // Do not add stereo pairs (have same timestamp)
       if (keys[i].t_ns != keys[j].t_ns) ids_to_match.emplace_back(i, j);
     }
   }
 
-  std::cerr << "Matching " << ids_to_match.size() << " image pairs..."
-            << std::endl;
+  std::cerr << "Brute-force matching " << ids_to_match.size()
+            << " image pairs..." << std::endl;
 
   tbb::parallel_for(
       tbb::blocked_range<size_t>(0, ids_to_match.size()),
@@ -1305,18 +1311,24 @@ void match_all() {
         }
       });
 
-  //
   int num_matches = 0;
   int num_inliers = 0;
+  int num_success = 0;
 
-  for (const auto& kv : feature_matches) {
-    num_matches += kv.second.matches.size();
-    num_inliers += kv.second.inliers.size();
+  for (const auto& p : ids_to_match) {
+    auto& md = feature_matches[std::make_pair(keys[p.first], keys[p.second])];
+    num_matches += md.matches.size();
+    num_inliers += md.inliers.size();
+    if (md.inliers.size() > 0) {
+      ++num_success;
+    }
   }
 
-  std::cerr << "Matched " << ids_to_match.size() << " image pairs with "
-            << num_inliers << " inlier matches (" << num_matches << " total)."
-            << std::endl;
+  std::cerr << "Successfully matched " << num_success << " out of "
+            << ids_to_match.size() << " image pairs with a total of "
+            << num_inliers << " inlier feature matches (" << num_matches
+            << " total). New total of matched image pairs is "
+            << feature_matches.size() << "." << std::endl;
 
   {
     std::ofstream os(matches_path, std::ios::binary);
@@ -1361,6 +1373,7 @@ void match_bow() {
     bow_db->query(v, num_bow_candidates, r);
 
     for (const auto& res_kv : r) {
+      // Do not add stereo pairs (have same timestamp)
       if (kv.first.t_ns != res_kv.first.t_ns) {
         ids_to_match.emplace_back(curr_id, id_to_key.at(res_kv.first));
       }
@@ -1369,7 +1382,7 @@ void match_bow() {
     bow_db->insert(kv.first, v);
   }
 
-  std::cerr << "Matching " << ids_to_match.size() << " image pairs..."
+  std::cerr << "Matching " << ids_to_match.size() << " image pairs using BoW..."
             << std::endl;
 
   tbb::parallel_for(
@@ -1399,18 +1412,24 @@ void match_bow() {
         }
       });
 
-  //
   int num_matches = 0;
   int num_inliers = 0;
+  int num_success = 0;
 
-  for (const auto& kv : feature_matches) {
-    num_matches += kv.second.matches.size();
-    num_inliers += kv.second.inliers.size();
+  for (const auto& p : ids_to_match) {
+    auto& md = feature_matches[std::make_pair(keys[p.first], keys[p.second])];
+    num_matches += md.matches.size();
+    num_inliers += md.inliers.size();
+    if (md.inliers.size() > 0) {
+      ++num_success;
+    }
   }
 
-  std::cerr << "Matched " << ids_to_match.size() << " image pairs with "
-            << num_inliers << " inlier matches (" << num_matches << " total)."
-            << std::endl;
+  std::cerr << "Successfully matched " << num_success << " out of "
+            << ids_to_match.size() << " image pairs with a total of "
+            << num_inliers << " inlier feature matches (" << num_matches
+            << " total). New total of matched image pairs is "
+            << feature_matches.size() << "." << std::endl;
 
   {
     std::ofstream os(matches_path, std::ios::binary);

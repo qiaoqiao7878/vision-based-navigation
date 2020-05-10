@@ -17,7 +17,10 @@ fi
 # https://stackoverflow.com/a/45181694
 NUM_CORES=`getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu || echo 1`
 
-NUM_PARALLEL_BUILDS=$NUM_CORES
+# Don't use all (virtual) cores in an attempt to not freeze the system.
+# Some students reported issues when running with all cores
+# (might have rather been RAM issue though).
+NUM_PARALLEL_BUILDS=$((NUM_CORES - 2 < 1 ? 1 : NUM_CORES - 2))
 
 # Important note on Eigen alignment and the arch flag. TLDR: Passing
 # arch=native for all build types is currently the only viable option

@@ -90,8 +90,8 @@ tbb::concurrent_unordered_map<TimeCamId, pangolin::TypedImage> calib_images;
 tbb::concurrent_unordered_map<TimeCamId, CalibCornerData> opt_corners;
 
 pangolin::Var<int> show_frame("ui.show_frame", 0, 0, 1500);
-pangolin::Var<bool> show_detected("ui.show_detected", true, false, true);
-pangolin::Var<bool> show_opt("ui.show_opt", true, false, true);
+pangolin::Var<bool> show_detected("ui.show_detected", true, true);
+pangolin::Var<bool> show_opt("ui.show_opt", true, true);
 
 std::string dataset_path;
 std::string cam_model = "ds";

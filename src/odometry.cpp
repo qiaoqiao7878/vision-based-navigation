@@ -145,7 +145,7 @@ ImageProjections image_projections;
 // switching the prefix from "ui" to "hidden" or vice verca. This way you can
 // show only the elements you need / want for development.
 
-pangolin::Var<bool> ui_show_hidden("ui.show_extra_options", false, false, true);
+pangolin::Var<bool> ui_show_hidden("ui.show_extra_options", false, true);
 
 //////////////////////////////////////////////
 /// Image display options
@@ -154,28 +154,25 @@ pangolin::Var<int> show_frame1("ui.show_frame1", 0, 0, 1500);
 pangolin::Var<int> show_cam1("ui.show_cam1", 0, 0, NUM_CAMS - 1);
 pangolin::Var<int> show_frame2("ui.show_frame2", 0, 0, 1500);
 pangolin::Var<int> show_cam2("ui.show_cam2", 1, 0, NUM_CAMS - 1);
-pangolin::Var<bool> lock_frames("ui.lock_frames", true, false, true);
-pangolin::Var<bool> show_detected("ui.show_detected", true, false, true);
-pangolin::Var<bool> show_matches("ui.show_matches", true, false, true);
-pangolin::Var<bool> show_inliers("ui.show_inliers", true, false, true);
-pangolin::Var<bool> show_reprojections("ui.show_reprojections", true, false,
-                                       true);
+pangolin::Var<bool> lock_frames("ui.lock_frames", true, true);
+pangolin::Var<bool> show_detected("ui.show_detected", true, true);
+pangolin::Var<bool> show_matches("ui.show_matches", true, true);
+pangolin::Var<bool> show_inliers("ui.show_inliers", true, true);
+pangolin::Var<bool> show_reprojections("ui.show_reprojections", true, true);
 pangolin::Var<bool> show_outlier_observations("ui.show_outlier_obs", false,
-                                              false, true);
-pangolin::Var<bool> show_ids("ui.show_ids", false, false, true);
-pangolin::Var<bool> show_epipolar("hidden.show_epipolar", false, false, true);
-pangolin::Var<bool> show_cameras3d("hidden.show_cameras", true, false, true);
-pangolin::Var<bool> show_points3d("hidden.show_points", true, false, true);
-pangolin::Var<bool> show_old_points3d("hidden.show_old_points3d", true, false,
-                                      true);
+                                              true);
+pangolin::Var<bool> show_ids("ui.show_ids", false, true);
+pangolin::Var<bool> show_epipolar("hidden.show_epipolar", false, true);
+pangolin::Var<bool> show_cameras3d("hidden.show_cameras", true, true);
+pangolin::Var<bool> show_points3d("hidden.show_points", true, true);
+pangolin::Var<bool> show_old_points3d("hidden.show_old_points3d", true, true);
 
 //////////////////////////////////////////////
 /// Feature extraction and matching options
 
 pangolin::Var<int> num_features_per_image("hidden.num_features", 1500, 10,
                                           5000);
-pangolin::Var<bool> rotate_features("hidden.rotate_features", true, false,
-                                    true);
+pangolin::Var<bool> rotate_features("hidden.rotate_features", true, true);
 pangolin::Var<int> feature_match_max_dist("hidden.match_max_dist", 70, 1, 255);
 pangolin::Var<double> feature_match_test_next_best("hidden.match_next_best",
                                                    1.2, 1, 4);
@@ -199,7 +196,7 @@ pangolin::Var<double> reprojection_error_pnp_inlier_threshold_pixel(
 /// Bundle Adjustment Options
 
 pangolin::Var<bool> ba_optimize_intrinsics("hidden.ba_opt_intrinsics", false,
-                                           false, true);
+                                           true);
 pangolin::Var<int> ba_verbose("hidden.ba_verbose", 1, 0, 2);
 
 pangolin::Var<double> reprojection_error_huber_pixel("hidden.ba_huber_width",
@@ -210,7 +207,7 @@ pangolin::Var<double> reprojection_error_huber_pixel("hidden.ba_huber_width",
 ///////////////////////////////////////////////////////////////////////////////
 
 // if you enable this, next_step is called repeatedly until completion
-pangolin::Var<bool> continue_next("ui.continue_next", false, false, true);
+pangolin::Var<bool> continue_next("ui.continue_next", false, true);
 
 using Button = pangolin::Var<std::function<void(void)>>;
 
@@ -756,7 +753,7 @@ void load_data(const std::string& dataset_path, const std::string& calib_path) {
       id++;
     }
 
-    std::cerr << "Loaded " << id << " images " << std::endl;
+    std::cerr << "Loaded " << id << " image pairs" << std::endl;
   }
 
   {
