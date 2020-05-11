@@ -162,6 +162,17 @@ void computeAngles(const pangolin::ManagedImage<uint8_t>& img_raw,
 
     if (rotate_features) {
       // TODO SHEET 3: compute angle
+      double m01 = 0;
+      double m10 = 0;
+      for (int x = -HALF_PATCH_SIZE; x <= HALF_PATCH_SIZE; x++) {
+        for (int y = -HALF_PATCH_SIZE; y <= HALF_PATCH_SIZE; y++) {
+          if (x * x + y * y <= HALF_PATCH_SIZE * HALF_PATCH_SIZE) {
+            m01 += y * img_raw(cx + x, cy + y);
+            m10 += x * img_raw(cx + x, cy + y);
+          }
+        }
+      }
+      angle = atan2(m01, m10);
       UNUSED(img_raw);
       UNUSED(cx);
       UNUSED(cy);
@@ -185,6 +196,22 @@ void computeDescriptors(const pangolin::ManagedImage<uint8_t>& img_raw,
     int cy = p[1];
 
     // TODO SHEET 3: compute descriptor
+    for (int j = 0; j < 256; j++) {
+      int pxa = pattern_31_x_a[j];
+      int pya = pattern_31_y_a[j];
+      int pxb = pattern_31_x_b[j];
+      int pyb = pattern_31_y_b[j];
+      int pxa_r = round(cos(angle) * pxa - sin(angle) * pya);
+      int pya_r = round(sin(angle) * pxa + cos(angle) * pya);
+      int pxb_r = round(cos(angle) * pxb - sin(angle) * pyb);
+      int pyb_r = round(sin(angle) * pxb + cos(angle) * pyb);
+      if (img_raw(cx + pxa_r, cy + pya_r) < img_raw(cx + pxb_r, cy + pyb_r)) {
+        descriptor[j] = 1;
+      } else {
+        descriptor[j] = 0;
+      }
+    }
+
     UNUSED(img_raw);
     UNUSED(angle);
     UNUSED(cx);
@@ -209,6 +236,59 @@ void matchDescriptors(const std::vector<std::bitset<256>>& corner_descriptors_1,
   matches.clear();
 
   // TODO SHEET 3: match features
+  // Create a vector of size n with all values as 256.
+
+  std::vector<int> min_dis_1(corner_descriptors_1.size(), 256);
+  std::vector<int> min_dis_index_1(corner_descriptors_1.size());
+  std::vector<int> second_min_dis_1(corner_descriptors_1.size(), 256);
+  std::bitset<256> t;
+
+  int hamming_distance;
+  for (size_t i = 0; i < corner_descriptors_1.size(); i++) {
+    for (size_t j = 0; j < corner_descriptors_2.size(); j++) {
+      t = corner_descriptors_1[i] ^ corner_descriptors_2[j];
+
+      hamming_distance = t.count();
+
+      if (hamming_distance < second_min_dis_1[i]) {
+        second_min_dis_1[i] = hamming_distance;
+      }
+      if (hamming_distance < min_dis_1[i]) {
+        second_min_dis_1[i] = min_dis_1[i];
+        min_dis_1[i] = hamming_distance;
+        min_dis_index_1[i] = j;
+      }
+    }
+  }
+  std::vector<int> min_dis_2(corner_descriptors_2.size(), 256);
+  std::vector<int> min_dis_index_2(corner_descriptors_2.size());
+  std::vector<int> second_min_dis_2(corner_descriptors_2.size(), 256);
+  for (size_t i = 0; i < corner_descriptors_2.size(); i++) {
+    for (size_t j = 0; j < corner_descriptors_1.size(); j++) {
+      t = corner_descriptors_2[i] ^ corner_descriptors_1[j];
+      hamming_distance = t.count();
+      if (hamming_distance < second_min_dis_2[i]) {
+        second_min_dis_2[i] = hamming_distance;
+      }
+      if (hamming_distance < min_dis_2[i]) {
+        second_min_dis_2[i] = min_dis_2[i];
+        min_dis_2[i] = hamming_distance;
+        min_dis_index_2[i] = j;
+      }
+    }
+  }
+  for (size_t i = 0; i < corner_descriptors_1.size(); i++) {
+    if (min_dis_1[i] < threshold) {
+      if (second_min_dis_1[i] >= min_dis_1[i] * dist_2_best) {
+        if (min_dis_index_2[min_dis_index_1[i]] == int(i)) {
+          if (second_min_dis_2[min_dis_index_1[i]] >=
+              min_dis_2[min_dis_index_1[i]] * dist_2_best) {
+            matches.push_back(std::make_pair(i, min_dis_index_1[i]));
+          }
+        }
+      }
+    }
+  }
   UNUSED(corner_descriptors_1);
   UNUSED(corner_descriptors_2);
   UNUSED(matches);
