@@ -46,6 +46,31 @@ class BowDatabase {
   inline void insert(const TimeCamId& tcid, const BowVector& bow_vector) {
     // TODO SHEET 3: add a bow_vector that corresponds to frame tcid to the
     // inverted index. You can assume the image hasn't been added before.
+
+    for (size_t i = 0; i < bow_vector.size(); i++) {
+      auto it = inverted_index.find(bow_vector[i].first);
+      if (it == inverted_index.end()) {
+        std::pair<TimeCamId, WordValue> pair;
+        pair.first = tcid;
+        pair.second = bow_vector[i].second;
+        tbb::concurrent_vector<std::pair<TimeCamId, WordValue>> vec;
+        vec.push_back(pair);
+        WordId wordid = bow_vector[i].first;
+
+        std::pair<WordId,
+                  tbb::concurrent_vector<std::pair<TimeCamId, WordValue>>>
+            pair2;
+        pair2.first = wordid;
+        pair2.second = vec;
+        inverted_index.insert(pair2);
+      } else {
+        std::pair<TimeCamId, WordValue> pair;
+        pair.first = tcid;
+        pair.second = bow_vector[i].second;
+        it->second.push_back(pair);
+      }
+    }
+
     UNUSED(tcid);
     UNUSED(bow_vector);
   }
@@ -57,6 +82,54 @@ class BowDatabase {
     // to accumulate scores and std::partial_sort for getting the closest
     // results. You should use L1 difference as the distance measure. You can
     // assume that BoW descripors are L1 normalized.
+
+    // Normalized sparse vector of words to represent images. "Sparse" means
+    // that words with value 0 don't appear explicitly.
+    // using BowVector = std::vector<std::pair<WordId, WordValue>>;
+
+    // Result of BoW query. Should be sorted by the confidence.
+    // using BowQueryResult = std::vector<std::pair<TimeCamId, double>>;
+    // std::cout << "bow: " << bow_vector.size() << "\n"; 978
+    // std::cout << "num: " << num_results << "\n"; 20
+    std::unordered_map<TimeCamId, double> score;
+    for (size_t i = 0; i < bow_vector.size(); i++) {
+      auto it = inverted_index.find(bow_vector[i].first);
+      if (it != inverted_index.end()) {
+        tbb::concurrent_vector<std::pair<TimeCamId, WordValue>> vec;
+        vec = it->second;
+        for (size_t j = 0; j < vec.size(); j++) {
+          auto it_1 = score.find(vec[j].first);
+          if (it_1 == score.end()) {
+            std::pair<TimeCamId, double> pair;
+
+            pair.first = vec[j].first;
+            pair.second = 2 + abs(vec[j].second - bow_vector[i].second) -
+                          abs(vec[j].second) - std::abs(bow_vector[i].second);
+            score.insert(pair);
+          } else {
+            score.find(vec[j].first)->second +=
+                abs(vec[j].second - bow_vector[i].second) - abs(vec[j].second) -
+                std::abs(bow_vector[i].second);
+          }
+        }
+      }
+    }
+
+    // Get an iterator pointing to begining of map
+    auto it_2 = score.begin();
+
+    // Iterate over the map using iterator
+    while (it_2 != score.end()) {
+      std::pair<TimeCamId, WordValue> pair;
+      pair.first = it_2->first;
+      pair.second = it_2->second;
+      results.push_back(pair);
+      it_2++;
+    }
+    std::partial_sort(
+        results.begin(), results.begin() + num_results, results.end(),
+        [](const auto& a, const auto& b) { return a.second < b.second; });
+    results.resize(num_results);
     UNUSED(bow_vector);
     UNUSED(num_results);
     UNUSED(results);

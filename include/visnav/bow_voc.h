@@ -65,6 +65,24 @@ class BowVocabulary {
     // feature and descriptor of the cluster centroid. Iterate until you reach
     // the leaf node. Save m_nodes[id].word_id and m_nodes[id].weight of the
     // leaf node to the corresponding variables.
+    size_t i = 0;
+    size_t min_dis_index = 0;
+    // Iterate until reach the leaf node
+    while (m_nodes[i].isLeaf() == false) {
+      int min_dis = 256;
+      for (size_t j = 0; j < m_nodes[i].children.size(); j++) {
+        int childern_index = m_nodes[i].children[j];
+        int distance = (m_nodes[childern_index].descriptor ^ feature).count();
+        if (distance < min_dis) {
+          min_dis = distance;
+          min_dis_index = childern_index;
+        }
+      }
+      i = min_dis_index;
+    }
+    word_id = m_nodes[min_dis_index].word_id;
+    weight = m_nodes[min_dis_index].weight;
+
     UNUSED(feature);
     UNUSED(word_id);
     UNUSED(weight);
@@ -81,8 +99,45 @@ class BowVocabulary {
     // TODO SHEET 3: transform the entire vector of features from an image to
     // the BoW representation (you can use transformFeatureToWord function). Use
     // L1 norm to normalize the resulting BoW vector.
+
+    // using BowVector = std::vector<std::pair<WordId, WordValue>>;
+    std::vector<WordId> wordid(features.size());
+    std::vector<WordValue> weigh(features.size());
+    std::unordered_map<WordId, WordValue> m;
+    for (size_t i = 0; i < features.size(); i++) {
+      transformFeatureToWord(features[i], wordid[i], weigh[i]);
+    }
+    double L1_norm = 0;
+    for (size_t i = 0; i < wordid.size(); i++) {
+      if (weigh[i] != 0) {
+        auto it = m.find(wordid[i]);
+        if (it == m.end()) {
+          std::pair<WordId, WordValue> pair;
+          pair.first = wordid[i];
+          pair.second = weigh[i];
+          L1_norm += weigh[i];
+          m.insert(pair);
+        } else {
+          m.find(wordid[i])->second += weigh[i];
+          L1_norm += weigh[i];
+        }
+      }
+    }
+
+    // Get an iterator pointing to begining of map
+    auto it = m.begin();
+
+    // Iterate over the map using iterator
+    while (it != m.end()) {
+      std::pair<WordId, WordValue> pair;
+      pair.first = it->first;
+      pair.second = it->second / L1_norm;
+      v.push_back(pair);
+      it++;
+    }
+
     UNUSED(features);
-  }
+  }  // namespace visnav
 
   void save(const std::string &filename) const {
     std::ofstream os(filename, std::ios::binary);
@@ -199,6 +254,6 @@ class BowVocabulary {
   /// Words of the vocabulary (tree leaves)
   /// this condition holds: m_words[wid]->word_id == wid
   std::vector<Node *> m_words;
-};
+};  // namespace visnav
 
 }  // namespace visnav

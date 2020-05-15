@@ -312,6 +312,7 @@ TEST(Ex3TestSuite, RansacInliers) {
   const double dist = (md_loaded.T_i_j.translation().normalized() -
                        md.T_i_j.translation().normalized())
                           .norm();
+
   const double angle = md_loaded.T_i_j.unit_quaternion().angularDistance(
       md.T_i_j.unit_quaternion());
 
@@ -407,6 +408,7 @@ TEST(Ex3TestSuite, BowVectorTransform) {
   {
     std::unordered_map<WordId, WordValue> m(bow0_loaded.begin(),
                                             bow0_loaded.end());
+
     double sum = 0;
     for (const auto& kv : bow0) {
       sum += std::abs(kv.second);

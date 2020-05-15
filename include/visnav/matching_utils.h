@@ -53,7 +53,7 @@ void computeEssential(const Sophus::SE3d& T_0_1, Eigen::Matrix3d& E) {
   const Eigen::Matrix3d R_0_1 = T_0_1.rotationMatrix();
 
   // TODO SHEET 3: compute essential matrix
-  const Eigen::Vector3d t_0_1_n = t_0_1 / pow(t_0_1.norm(), 0.5);
+  const Eigen::Vector3d t_0_1_n = t_0_1.normalized();
   Eigen::Matrix3d t_0_1_hat;
   t_0_1_hat << 0, -t_0_1_n[2], t_0_1_n[1], t_0_1_n[2], 0, -t_0_1_n[0],
       -t_0_1_n[1], t_0_1_n[0], 0;
@@ -77,7 +77,8 @@ void findInliersEssential(const KeypointsData& kd1, const KeypointsData& kd2,
     // TODO SHEET 3: determine inliers and store in md.inliers
     Eigen::Vector3d p0_3d = cam1->unproject(p0_2d);
     Eigen::Vector3d p1_3d = cam2->unproject(p1_2d);
-    if (p0_3d.transpose() * E * p1_3d < epipolar_error_threshold) {
+
+    if (abs(p0_3d.transpose() * E * p1_3d) < epipolar_error_threshold) {
       md.inliers.push_back(md.matches[j]);
     }
     UNUSED(cam1);
@@ -103,6 +104,61 @@ void findInliersRansac(const KeypointsData& kd1, const KeypointsData& kd2,
   // was successful, you should do non-linear refinement of the model parameters
   // using all inliers, and then re-estimate the inlier set with the refined
   // model parameters.
+  opengv::bearingVectors_t p0_3d(md.matches.size());
+  opengv::bearingVectors_t p1_3d(md.matches.size());
+  Eigen::Vector2d p0_2d;
+  Eigen::Vector2d p1_2d;
+  for (size_t j = 0; j < md.matches.size(); j++) {
+    p0_2d = kd1.corners[md.matches[j].first];
+    p1_2d = kd2.corners[md.matches[j].second];
+    p0_3d[j] = cam1->unproject(p0_2d);
+    p1_3d[j] = cam2->unproject(p1_2d);
+  }
+  // create the central relative adapter
+  opengv::relative_pose::CentralRelativeAdapter adapter(p0_3d, p1_3d);
+  // create a RANSAC object
+  opengv::sac::Ransac<
+      opengv::sac_problems::relative_pose::CentralRelativePoseSacProblem>
+      ransac;
+  // create a CentralRelativePoseSacProblem
+  // (set algorithm to STEWENIUS, NISTER, SEVENPT, or EIGHTPT)
+  std::shared_ptr<
+      opengv::sac_problems::relative_pose::CentralRelativePoseSacProblem>
+      relposeproblem_ptr(
+          new opengv::sac_problems::relative_pose::
+              CentralRelativePoseSacProblem(
+                  adapter, opengv::sac_problems::relative_pose::
+                               CentralRelativePoseSacProblem::NISTER));
+  // run ransac
+  ransac.sac_model_ = relposeproblem_ptr;
+  ransac.threshold_ = ransac_thresh;
+  ransac.computeModel();
+
+  // non-linear optimization (using all inliers)
+  opengv::transformation_t nonlinear_transformation =
+      opengv::relative_pose::optimize_nonlinear(adapter, ransac.inliers_);
+  // reselect inliers
+  ransac.sac_model_->selectWithinDistance(ransac.model_coefficients_,
+                                          ransac.threshold_, ransac.inliers_);
+
+  std::vector<int> inlier_index;
+  inlier_index = ransac.inliers_;
+
+  // store inliers
+  if (int(inlier_index.size()) < ransac_min_inliers) {
+    md.inliers.clear();
+  } else {
+    for (size_t i = 0; i < inlier_index.size(); i++) {
+      md.inliers.push_back(md.matches[inlier_index[i]]);
+    }
+  }
+  // store translation
+  md.T_i_j.translation() = nonlinear_transformation.matrix().col(3);
+  md.T_i_j.translation() = md.T_i_j.translation().normalized();
+  // store rotation matrix
+  Eigen::Matrix3d rotation_matrix;
+  rotation_matrix = nonlinear_transformation.matrix().block(0, 0, 3, 3);
+  md.T_i_j.so3() = rotation_matrix;
   UNUSED(kd1);
   UNUSED(kd2);
   UNUSED(cam1);
