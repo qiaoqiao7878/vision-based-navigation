@@ -47,27 +47,14 @@ class BowDatabase {
     // TODO SHEET 3: add a bow_vector that corresponds to frame tcid to the
     // inverted index. You can assume the image hasn't been added before.
 
-    for (size_t i = 0; i < bow_vector.size(); i++) {
-      auto it = inverted_index.find(bow_vector[i].first);
+    for (const auto& bv : bow_vector) {
+      auto it = inverted_index.find(bv.first);
       if (it == inverted_index.end()) {
-        std::pair<TimeCamId, WordValue> pair;
-        pair.first = tcid;
-        pair.second = bow_vector[i].second;
         tbb::concurrent_vector<std::pair<TimeCamId, WordValue>> vec;
-        vec.push_back(pair);
-        WordId wordid = bow_vector[i].first;
-
-        std::pair<WordId,
-                  tbb::concurrent_vector<std::pair<TimeCamId, WordValue>>>
-            pair2;
-        pair2.first = wordid;
-        pair2.second = vec;
-        inverted_index.insert(pair2);
+        vec.push_back(std::make_pair(tcid, bv.second));
+        inverted_index.insert(std::make_pair(bv.first, vec));
       } else {
-        std::pair<TimeCamId, WordValue> pair;
-        pair.first = tcid;
-        pair.second = bow_vector[i].second;
-        it->second.push_back(pair);
+        it->second.push_back(std::make_pair(tcid, bv.second));
       }
     }
 
@@ -92,44 +79,44 @@ class BowDatabase {
     // std::cout << "bow: " << bow_vector.size() << "\n"; 978
     // std::cout << "num: " << num_results << "\n"; 20
     std::unordered_map<TimeCamId, double> score;
-    for (size_t i = 0; i < bow_vector.size(); i++) {
-      auto it = inverted_index.find(bow_vector[i].first);
+
+    for (const auto& bv : bow_vector) {
+      auto it = inverted_index.find(bv.first);
       if (it != inverted_index.end()) {
         tbb::concurrent_vector<std::pair<TimeCamId, WordValue>> vec;
         vec = it->second;
-        for (size_t j = 0; j < vec.size(); j++) {
-          auto it_1 = score.find(vec[j].first);
-          if (it_1 == score.end()) {
-            std::pair<TimeCamId, double> pair;
 
-            pair.first = vec[j].first;
-            pair.second = 2 + abs(vec[j].second - bow_vector[i].second) -
-                          abs(vec[j].second) - std::abs(bow_vector[i].second);
-            score.insert(pair);
+        for (auto& ve : vec) {
+          // find TimeCamId
+          auto it_1 = score.find(ve.first);
+          if (it_1 == score.end()) {
+            double diff = 2 + abs(ve.second - bv.second) - abs(ve.second) -
+                          std::abs(bv.second);
+            score.insert(std::make_pair(ve.first, diff));
           } else {
-            score.find(vec[j].first)->second +=
-                abs(vec[j].second - bow_vector[i].second) - abs(vec[j].second) -
-                std::abs(bow_vector[i].second);
+            score.find(ve.first)->second += abs(ve.second - bv.second) -
+                                            abs(ve.second) -
+                                            std::abs(bv.second);
           }
         }
       }
     }
 
-    // Get an iterator pointing to begining of map
-    auto it_2 = score.begin();
-
-    // Iterate over the map using iterator
-    while (it_2 != score.end()) {
-      std::pair<TimeCamId, WordValue> pair;
-      pair.first = it_2->first;
-      pair.second = it_2->second;
-      results.push_back(pair);
-      it_2++;
+    for (const auto& sc : score) {
+      results.push_back(std::make_pair(sc.first, sc.second));
     }
-    std::partial_sort(
-        results.begin(), results.begin() + num_results, results.end(),
-        [](const auto& a, const auto& b) { return a.second < b.second; });
-    results.resize(num_results);
+
+    if (results.size() >= num_results) {
+      std::partial_sort(
+          results.begin(), results.begin() + num_results, results.end(),
+          [](const auto& a, const auto& b) { return a.second < b.second; });
+      results.resize(num_results);
+    } else {
+      std::partial_sort(
+          results.begin(), results.begin() + results.size(), results.end(),
+          [](const auto& a, const auto& b) { return a.second < b.second; });
+    }
+
     UNUSED(bow_vector);
     UNUSED(num_results);
     UNUSED(results);

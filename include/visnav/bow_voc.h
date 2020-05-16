@@ -65,23 +65,23 @@ class BowVocabulary {
     // feature and descriptor of the cluster centroid. Iterate until you reach
     // the leaf node. Save m_nodes[id].word_id and m_nodes[id].weight of the
     // leaf node to the corresponding variables.
-    size_t i = 0;
+    size_t id = 0;
     size_t min_dis_index = 0;
     // Iterate until reach the leaf node
-    while (m_nodes[i].isLeaf() == false) {
+    while (m_nodes[id].isLeaf() == false) {
       int min_dis = 256;
-      for (size_t j = 0; j < m_nodes[i].children.size(); j++) {
-        int childern_index = m_nodes[i].children[j];
+      for (size_t j = 0; j < m_nodes[id].children.size(); j++) {
+        int childern_index = m_nodes[id].children[j];
         int distance = (m_nodes[childern_index].descriptor ^ feature).count();
         if (distance < min_dis) {
           min_dis = distance;
           min_dis_index = childern_index;
         }
       }
-      i = min_dis_index;
+      id = min_dis_index;
     }
-    word_id = m_nodes[min_dis_index].word_id;
-    weight = m_nodes[min_dis_index].weight;
+    word_id = m_nodes[id].word_id;
+    weight = m_nodes[id].weight;
 
     UNUSED(feature);
     UNUSED(word_id);
@@ -101,25 +101,21 @@ class BowVocabulary {
     // L1 norm to normalize the resulting BoW vector.
 
     // using BowVector = std::vector<std::pair<WordId, WordValue>>;
-    std::vector<WordId> wordid(features.size());
-    std::vector<WordValue> weigh(features.size());
     std::unordered_map<WordId, WordValue> m;
-    for (size_t i = 0; i < features.size(); i++) {
-      transformFeatureToWord(features[i], wordid[i], weigh[i]);
-    }
+    std::vector<std::pair<WordId, WordValue>> pairs(features.size());
+    size_t i = 0;
     double L1_norm = 0;
-    for (size_t i = 0; i < wordid.size(); i++) {
-      if (weigh[i] != 0) {
-        auto it = m.find(wordid[i]);
+    for (auto &pair : pairs) {
+      transformFeatureToWord(features[i], pair.first, pair.second);
+      i++;
+      if (pair.second != 0) {
+        auto it = m.find(pair.first);
         if (it == m.end()) {
-          std::pair<WordId, WordValue> pair;
-          pair.first = wordid[i];
-          pair.second = weigh[i];
-          L1_norm += weigh[i];
+          L1_norm += pair.second;
           m.insert(pair);
         } else {
-          m.find(wordid[i])->second += weigh[i];
-          L1_norm += weigh[i];
+          m.find(pair.first)->second += pair.second;
+          L1_norm += pair.second;
         }
       }
     }
@@ -129,10 +125,7 @@ class BowVocabulary {
 
     // Iterate over the map using iterator
     while (it != m.end()) {
-      std::pair<WordId, WordValue> pair;
-      pair.first = it->first;
-      pair.second = it->second / L1_norm;
-      v.push_back(pair);
+      v.push_back(std::make_pair(it->first, it->second / L1_norm));
       it++;
     }
 
