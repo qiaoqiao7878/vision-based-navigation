@@ -138,9 +138,8 @@ void findInliersRansac(const KeypointsData& kd1, const KeypointsData& kd2,
   opengv::transformation_t nonlinear_transformation =
       opengv::relative_pose::optimize_nonlinear(adapter, ransac.inliers_);
   // reselect inliers
-  ransac.sac_model_->selectWithinDistance(ransac.model_coefficients_,
+  ransac.sac_model_->selectWithinDistance(nonlinear_transformation,
                                           ransac.threshold_, ransac.inliers_);
-
   std::vector<int> inlier_index;
   inlier_index = ransac.inliers_;
 
