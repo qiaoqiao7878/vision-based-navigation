@@ -78,6 +78,7 @@ void test_cameras_equal(const Cameras& cameras_ref, const Cameras& cameras) {
 void test_landmark_equal(const Landmark& lm_ref, const Landmark& lm,
                          const TrackId lm_id) {
   const double lm_dist = (lm_ref.p - lm.p).norm();
+
   EXPECT_LE(lm_dist, 0.05) << "Position of lm " << lm_id << " inaccurate";
   EXPECT_EQ(lm_ref.obs, lm.obs)
       << "List of observations for lm " << lm_id << " doesn't match.";

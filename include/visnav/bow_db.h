@@ -48,14 +48,7 @@ class BowDatabase {
     // inverted index. You can assume the image hasn't been added before.
 
     for (const auto& bv : bow_vector) {
-      auto it = inverted_index.find(bv.first);
-      if (it == inverted_index.end()) {
-        tbb::concurrent_vector<std::pair<TimeCamId, WordValue>> vec;
-        vec.push_back(std::make_pair(tcid, bv.second));
-        inverted_index.insert(std::make_pair(bv.first, vec));
-      } else {
-        it->second.push_back(std::make_pair(tcid, bv.second));
-      }
+      inverted_index[bv.first].push_back(std::make_pair(tcid, bv.second));
     }
 
     UNUSED(tcid);
@@ -94,9 +87,8 @@ class BowDatabase {
                           std::abs(bv.second);
             score.insert(std::make_pair(ve.first, diff));
           } else {
-            score.find(ve.first)->second += abs(ve.second - bv.second) -
-                                            abs(ve.second) -
-                                            std::abs(bv.second);
+            it_1->second += abs(ve.second - bv.second) - abs(ve.second) -
+                            std::abs(bv.second);
           }
         }
       }

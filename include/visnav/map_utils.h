@@ -140,6 +140,78 @@ int add_new_landmarks_between_cams(const TimeCamId& tcid0,
   std::vector<TrackId> new_track_ids;
 
   // TODO SHEET 4: Triangulate all new features and add to the map
+
+  // TrackId: Ids for feature tracks; also used for landmarks created from (some
+  // of) the tracks;
+
+  // using TrackId = int64_t;
+
+  // using FeatureTracks = std::unordered_map<TrackId, FeatureTrack>;
+
+  // using FeatureTrack = std::map<TimeCamId, FeatureId>;
+
+  // FeatureId: ids for 2D features detected in images
+
+  // using FeatureId = int;
+
+  // using Corners = tbb::concurrent_unordered_map<TimeCamId,
+  // KeypointsData>;
+
+  // using Cameras = std::map<TimeCamId, Camera, std::less<TimeCamId>,
+  // Eigen::aligned_allocator<std::pair<const TimeCamId, Camera>>>;
+
+  opengv::bearingVectors_t b0;
+  opengv::bearingVectors_t b1;
+  for (const auto& tr : shared_track_ids) {
+    auto it = landmarks.find(tr);
+    // if the track_id doesn't exist in the lankmarks, add it
+    if (it == landmarks.end()) {
+      new_track_ids.push_back(tr);
+    }
+  }
+  for (const auto& tr : new_track_ids) {
+    auto it = feature_tracks.find(tr);
+
+    if (it != feature_tracks.end()) {
+      FeatureTrack ft;
+      ft = it->second;
+      FeatureId fid0 = ft.find(tcid0)->second;
+      FeatureId fid1 = ft.find(tcid1)->second;
+      Eigen::Vector2d p0_2d = feature_corners.find(tcid0)->second.corners[fid0];
+      Eigen::Vector2d p1_2d = feature_corners.find(tcid1)->second.corners[fid1];
+      Eigen::Vector3d p0_3d =
+          calib_cam.intrinsics[tcid0.cam_id]->unproject(p0_2d);
+      Eigen::Vector3d p1_3d =
+          calib_cam.intrinsics[tcid1.cam_id]->unproject(p1_2d);
+      b0.push_back(p0_3d);
+      b1.push_back(p1_3d);
+    }
+  }
+
+  opengv::relative_pose::CentralRelativeAdapter adapter(b0, b1);
+  Sophus::SE3d rel_pose = cameras.find(tcid0)->second.T_w_c.inverse() *
+                          cameras.find(tcid1)->second.T_w_c;
+
+  adapter.setR12(rel_pose.so3().matrix());
+  adapter.sett12(rel_pose.translation());
+
+  // point_t opengv::triangulation::triangulate(const
+  // relative_pose::RelativeAdapterBase & adapter,size_t index)
+  // Compute the position of a 3D point seen from two viewpoints. Linear
+  // Method.Return The 3D point expressed in the first viewpoint.
+  for (size_t i = 0; i < new_track_ids.size(); i++) {
+    Eigen::Vector3d point = opengv::triangulation::triangulate(adapter, i);
+
+    // using Landmarks = std::unordered_map<TrackId, Landmark>;
+    Landmark lm;
+    lm.p = cameras.find(tcid0)->second.T_w_c * point;
+    FeatureTrack ft = feature_tracks.find(new_track_ids[i])->second;
+    // FeatureTrack obs;
+    lm.obs = ft;
+
+    landmarks.insert(std::make_pair(new_track_ids[i], lm));
+  }
+
   UNUSED(calib_cam);
   UNUSED(feature_corners);
   UNUSED(cameras);
@@ -169,6 +241,15 @@ bool initialize_scene_from_stereo_pair(const TimeCamId& tcid0,
   }
 
   // TODO SHEET 4: Initialize scene (add initial cameras and landmarks)
+  Camera camera0;
+  Sophus::SE3d se3;
+  camera0.T_w_c = se3;
+  Camera camera1;
+  camera1.T_w_c = calib_cam.T_i_c[0].inverse() * calib_cam.T_i_c[1];
+
+  cameras.insert(std::make_pair(tcid0, camera0));
+  cameras.insert(std::make_pair(tcid1, camera1));
+
   UNUSED(calib_cam);
   UNUSED(feature_corners);
   UNUSED(feature_tracks);

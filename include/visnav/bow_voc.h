@@ -109,14 +109,11 @@ class BowVocabulary {
       transformFeatureToWord(features[i], pair.first, pair.second);
       i++;
       if (pair.second != 0) {
-        auto it = m.find(pair.first);
-        if (it == m.end()) {
-          L1_norm += pair.second;
-          m.insert(pair);
-        } else {
-          m.find(pair.first)->second += pair.second;
-          L1_norm += pair.second;
-        }
+        // If the element doesn't exist, the [] operator creates a
+        // value-initialized one. So in this case is default-constructs and
+        // empty vector automatically.
+        m[pair.first] += pair.second;
+        L1_norm += pair.second;
       }
     }
 
