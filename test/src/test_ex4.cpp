@@ -69,6 +69,7 @@ void test_cameras_equal(const Cameras& cameras_ref, const Cameras& cameras) {
         << " in map.";
     const Sophus::SE3d diff =
         kv.second.T_w_c.inverse() * cameras.at(kv.first).T_w_c;
+
     EXPECT_LE(diff.log().norm(), 1e-6)
         << "Pose of camera " << kv.first.t_ns << "_" << kv.first.cam_id
         << " inaccurate.";
