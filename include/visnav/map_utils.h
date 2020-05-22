@@ -295,9 +295,12 @@ void localize_camera(
   // TODO SHEET 4: Localize a new image in a given map
   opengv::bearingVectors_t bearingVectors;
   opengv::points_t points;
+  // for every track id
+
   for (const auto& tr : shared_track_ids) {
+    // find the landmark with this track id
     points.push_back(landmarks.find(tr)->second.p);
-    FeatureId fid = landmarks.find(tr)->second.obs.find(tcid)->second;
+    FeatureId fid = feature_tracks.find(tr)->second.find(tcid)->second;
     Eigen::Vector2d p_2d = feature_corners.find(tcid)->second.corners[fid];
     Eigen::Vector3d p_3d = calib_cam.intrinsics[tcid.cam_id]->unproject(p_2d);
     bearingVectors.push_back(p_3d);
@@ -326,15 +329,16 @@ void localize_camera(
   ransac.computeModel();
 
   // non-linear optimization (using all inliers)
-  // std::cout << ransac.model_coefficients_ << "\n";
-  adapter.sett(ransac.model_coefficients_.col(3));
-  adapter.setR(ransac.model_coefficients_.block(0, 0, 3, 3));
+
+  adapter.sett(ransac.model_coefficients_.matrix().col(3));
+  adapter.setR(ransac.model_coefficients_.matrix().block(0, 0, 3, 3));
 
   opengv::transformation_t nonlinear_transformation =
       opengv::absolute_pose::optimize_nonlinear(adapter, ransac.inliers_);
   // reselect inliers
   ransac.sac_model_->selectWithinDistance(nonlinear_transformation,
                                           ransac.threshold_, ransac.inliers_);
+
   std::vector<int> inlier_index;
   inlier_index = ransac.inliers_;
 

@@ -1734,7 +1734,6 @@ void add_next_camera() {
                     feature_tracks, landmarks,
                     reprojection_error_pnp_inlier_threshold_pixel, T_w_c,
                     inlier_track_ids);
-
     // actually still take all observations if option is set
     if (always_add_all_observations) {
       inlier_track_ids = candidate->shared_tracks;
