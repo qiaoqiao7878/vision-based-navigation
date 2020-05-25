@@ -61,6 +61,24 @@ void project_landmarks(
   // locations of the cameras. Put 2d coordinates of the projected points into
   // projected_points and the corresponding id of the landmark into
   // projected_track_ids.
+  for (const auto& lm : landmarks) {
+    Eigen::Vector3d lm_cameraframe;
+    // transform landmarks from world frame to camera frame
+    lm_cameraframe = current_pose.inverse() * lm.second.p;
+    // Ignore all points that are behind the camera
+    if (lm_cameraframe.z() >= cam_z_threshold) {
+      Eigen::Vector2d p_2d;
+      p_2d = cam->project(lm_cameraframe);
+      // ignore all points that project outside the image
+      if ((0 <= p_2d.x()) && (p_2d.x() <= 640) && (p_2d.y() >= 0) &&
+          (p_2d.y() <= 480)) {
+        // std::cout << lm_cameraframe.z() << "/" << p_2d.x() << "/" << p_2d.y()
+        //          << "\n";
+        projected_track_ids.push_back(lm.first);
+        projected_points.push_back(p_2d);
+      }
+    }
+  }
   UNUSED(current_pose);
   UNUSED(cam);
   UNUSED(landmarks);
