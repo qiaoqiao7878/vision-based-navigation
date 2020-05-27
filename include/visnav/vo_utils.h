@@ -231,8 +231,6 @@ void localize_camera(const std::shared_ptr<AbstractCamera<double>>& cam,
   // non-linear optimization (using all inliers)
 
   adapter.sett(ransac.model_coefficients_.matrix().col(3));
-  std::cout << "R:" << ransac.model_coefficients_.matrix().block(0, 0, 3, 3)
-            << "\n";
   adapter.setR(ransac.model_coefficients_.matrix().block(0, 0, 3, 3));
 
   opengv::transformation_t nonlinear_transformation =
@@ -356,8 +354,8 @@ void add_new_landmarks(const TimeCamId tcidl, const TimeCamId tcidr,
 
     // using Landmarks = std::unordered_map<TrackId, Landmark>;
     Landmark lm;
-    // store landmark position in camera frame
-    lm.p = point;
+    // store landmark position in world frame
+    lm.p = md.T_w_c * point;
 
     // using FeatureTrack = std::map<TimeCamId, FeatureId>;
     lm.obs.insert(std::make_pair(tcidl, new_feature_ids_left[i]));

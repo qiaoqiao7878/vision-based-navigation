@@ -203,7 +203,7 @@ int add_new_landmarks_between_cams(const TimeCamId& tcid0,
 
     // using Landmarks = std::unordered_map<TrackId, Landmark>;
     Landmark lm;
-    // store landmark position in camera frame
+    // store landmark position in world frame
     lm.p = cameras.find(tcid0)->second.T_w_c * point;
     // using FeatureTracks = std::unordered_map<TrackId, FeatureTrack>;
 
