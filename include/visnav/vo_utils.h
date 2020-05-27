@@ -231,6 +231,8 @@ void localize_camera(const std::shared_ptr<AbstractCamera<double>>& cam,
   // non-linear optimization (using all inliers)
 
   adapter.sett(ransac.model_coefficients_.matrix().col(3));
+  std::cout << "R:" << ransac.model_coefficients_.matrix().block(0, 0, 3, 3)
+            << "\n";
   adapter.setR(ransac.model_coefficients_.matrix().block(0, 0, 3, 3));
 
   opengv::transformation_t nonlinear_transformation =
@@ -393,30 +395,40 @@ void remove_old_keyframes(const TimeCamId tcidl, const int max_num_kfs,
 
   int size_kf = kf_frames.size();
   int num_delete_kf = 0;
-  for (auto& kf : kf_frames) {
-    num_delete_kf++;
+  // delete keyframes
+  for (auto it = kf_frames.begin(); it != kf_frames.end();) {
+    ++num_delete_kf;
     if (num_delete_kf > size_kf - max_num_kfs) {
       break;
     }
-    TimeCamId tcid_delete_l;
-    tcid_delete_l.cam_id = 0;
-    tcid_delete_l.t_ns = kf;
-    cameras.erase(tcid_delete_l);
-    TimeCamId tcid_delete_r;
-    tcid_delete_r.cam_id = 1;
-    tcid_delete_r.t_ns = kf;
-    cameras.erase(tcid_delete_r);
-    kf_frames.erase(kf);
-    for (auto& lm : landmarks) {
-      lm.second.obs.erase(tcid_delete_l);
-      lm.second.obs.erase(tcid_delete_r);
+    kf_frames.erase(it++);
+  }
+  // delete camera if it is not in current keyframe
+  for (auto it = cameras.begin(); it != cameras.end();) {
+    if (kf_frames.count(it->first.t_ns) == 0) {
+      cameras.erase(it++);
+    } else {
+      ++it;
     }
   }
-
-  for (auto& lm : landmarks) {
-    if (lm.second.obs.size() == 0) {
-      old_landmarks.insert(lm);
-      landmarks.erase(lm.first);
+  // delete not existing camera from the landmarks
+  for (auto it = landmarks.begin(); it != landmarks.end();) {
+    for (auto it1 = it->second.obs.begin(); it1 != it->second.obs.end();) {
+      if (cameras.count(it1->first) == 0) {
+        it->second.obs.erase(it1++);
+      } else {
+        ++it1;
+      }
+    }
+    ++it;
+  }
+  // if landmarks.obs has no camera, move it to old_landmarks
+  for (auto it = landmarks.begin(); it != landmarks.end();) {
+    if (it->second.obs.size() == 0) {
+      old_landmarks.insert(std::make_pair(it->first, it->second));
+      landmarks.erase(it++);
+    } else {
+      ++it;
     }
   }
   UNUSED(max_num_kfs);
