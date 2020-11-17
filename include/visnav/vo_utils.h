@@ -376,7 +376,7 @@ void add_new_landmarks(const TimeCamId tcidl, const TimeCamId tcidr,
   UNUSED(R_0_1);
 }
 
-void remove_old_keyframes(const TimeCamId tcidl, const int max_num_kfs,
+void remove_old_keyframes(const TimeCamId& tcidl, const int max_num_kfs,
                           Cameras& cameras, Landmarks& landmarks,
                           Landmarks& old_landmarks,
                           std::set<FrameId>& kf_frames) {
@@ -433,5 +433,151 @@ void remove_old_keyframes(const TimeCamId tcidl, const int max_num_kfs,
   UNUSED(cameras);
   UNUSED(landmarks);
   UNUSED(old_landmarks);
-}  // namespace visnav
+}
+
+void remove_redundant_keyframes(
+    const TimeCamId& tcidl, const int max_num_kfs, Cameras& cameras,
+    Landmarks& landmarks, Landmarks& old_landmarks,
+    std::set<FrameId>& kf_frames,
+    std::vector<std::pair<FrameId, FrameId>>& accepted_loop,
+    const int num_common_kfs, const double shared_kfs_per) {
+  std::set<FrameId> loop_frame;
+  for (const auto& loop : accepted_loop) {
+    loop_frame.insert(loop.first);
+    loop_frame.insert(loop.second);
+  }
+
+  kf_frames.emplace(tcidl.t_ns);
+  // To do:
+  // We discard all the keyframes in Kc whose 90% of the map points have been
+  // seen in at least other three keyframes in the same or finer scale.
+
+  if (int(kf_frames.size()) >= max_num_kfs) {
+    // identify if landmark has more than 4 observations
+    std::unordered_map<TrackId, bool> if_lm_has_more_than_4_obs;
+    for (const auto& lm : landmarks) {
+      int num_obs = 0;
+      for (const auto& lmobs : lm.second.obs) {
+        if (lmobs.first.cam_id == tcidl.cam_id) {
+          ++num_obs;
+        }
+      }
+      if (num_obs >= num_common_kfs) {
+        if_lm_has_more_than_4_obs.insert(std::make_pair(lm.first, true));
+      } else {
+        if_lm_has_more_than_4_obs.insert(std::make_pair(lm.first, false));
+      }
+    }
+
+    // for every keyframe
+
+    for (auto it = kf_frames.begin(); it != kf_frames.end();) {
+      // number of landmarks that this keyframe observes
+      double num_lm = 0;
+      // number of landmarks that this keyframe observes and at least other 3
+      // keyframes observes
+      double num_shared_lm = 0;
+      TimeCamId tcid(*it, 0);
+      for (const auto& lm : landmarks) {
+        if (lm.second.obs.count(tcid) != 0) {
+          ++num_lm;
+          if (if_lm_has_more_than_4_obs.find(lm.first)->second == true) {
+            ++num_shared_lm;
+          }
+        }
+      }
+
+      // if it is not the current frame,not the 0 frame, is not loop frames
+      if ((num_shared_lm / num_lm) >= shared_kfs_per && *it != tcidl.t_ns &&
+          *it != 0 && loop_frame.count(*it) == 0) {
+        std::cout << "delete keyframe" << *it << std::endl;
+        kf_frames.erase(it++);
+        // only delete one frame at a time
+        break;
+
+      } else {
+        ++it;
+      }
+    }
+
+    // delete camera if it is not in current keyframe
+    for (auto it = cameras.begin(); it != cameras.end();) {
+      // check if it is in the keyframes
+      if (kf_frames.count(it->first.t_ns) == 0) {
+        cameras.erase(it++);
+      } else {
+        ++it;
+      }
+    }
+    // delete not existing camera from the landmarks
+    for (auto it = landmarks.begin(); it != landmarks.end();) {
+      for (auto it1 = it->second.obs.begin(); it1 != it->second.obs.end();) {
+        if (cameras.count(it1->first) == 0) {
+          it->second.obs.erase(it1++);
+        } else {
+          ++it1;
+        }
+      }
+      ++it;
+    }
+    // if landmarks.obs has no camera, move it to old_landmarks
+    for (auto it = landmarks.begin(); it != landmarks.end();) {
+      if (it->second.obs.size() == 0) {
+        old_landmarks.insert(std::make_pair(it->first, it->second));
+        landmarks.erase(it++);
+      } else {
+        ++it;
+      }
+    }
+  }
+  UNUSED(max_num_kfs);
+  UNUSED(cameras);
+  UNUSED(landmarks);
+  UNUSED(old_landmarks);
+}
+void get_referenz_kf_id(const TimeCamId& tcidl, const Cameras& cameras,
+                        const Landmarks& landmarks, const LandmarkMatchData& md,
+                        FrameId& referenz_kf_id) {
+  int most_observation_num = 0;
+
+  for (const auto& cam : cameras) {
+    // don't count the same keyframe
+    if (cam.first.t_ns == tcidl.t_ns) {
+      continue;
+    }
+    if (cam.first.cam_id == tcidl.cam_id) {
+      int weight_left = 0;
+
+      for (const auto& inl : md.inliers) {
+        TrackId tid = inl.second;
+        if (landmarks.find(tid)->second.obs.count(cam.first) != 0) {
+          weight_left += 1;
+        }
+
+        // only if both frames observe more than x same landmarks, the edge
+        // between them will be added
+        if (weight_left > most_observation_num) {
+          most_observation_num = weight_left;
+          referenz_kf_id = cam.first.t_ns;
+        }
+      }
+    }
+  }
+}
+
+void cal_error(const Cameras& cameras, const Cameras& cameras_ground_truth,
+               double& error) {
+  error = 0;
+  for (const auto& cam : cameras) {
+    if (cam.first.cam_id == 0) {
+      Eigen::Vector3d position;
+      position = cam.second.T_w_c.translation();
+      Eigen::Vector3d ground_truth_position;
+      ground_truth_position =
+          cameras_ground_truth.find(cam.first)->second.T_w_c.translation();
+      error += (position - ground_truth_position).norm();
+    }
+  }
+  error = error / (cameras.size() / 2);
+}
 }  // namespace visnav

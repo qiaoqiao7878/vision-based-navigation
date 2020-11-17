@@ -68,4 +68,23 @@ void render_camera(const Eigen::Matrix4d& T_w_c, float lineWidth,
   glPopMatrix();
 }
 
+void render_trajectory(const Eigen::Matrix4d& T_w_c_1,
+                       const Eigen::Matrix4d& T_w_c_2, float lineWidth,
+                       const u_int8_t* color) {
+  glPushMatrix();
+  glMultMatrixd(T_w_c_1.data());
+  glColor3ubv(color);
+  glLineWidth(lineWidth);
+  glBegin(GL_LINES);
+  glVertex3f(0, 0, 0);
+  Eigen::Matrix4d T_c1_c2 = T_w_c_1.inverse() * T_w_c_2;
+  double x = T_c1_c2(0, 3);
+  double y = T_c1_c2(1, 3);
+  double z = T_c1_c2(2, 3);
+
+  glVertex3f(x, y, z);
+  glEnd();
+  glPopMatrix();
+}
+
 }  // namespace visnav

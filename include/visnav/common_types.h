@@ -32,19 +32,18 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #pragma once
 
+#include <tbb/concurrent_unordered_map.h>
 #include <bitset>
 #include <cstdint>
 #include <map>
 #include <unordered_map>
 #include <vector>
 
-#include <tbb/concurrent_unordered_map.h>
-
+#include <visnav/hash.h>
 #include <Eigen/Core>
 #include <Eigen/StdVector>
+#include <memory>
 #include <sophus/se3.hpp>
-
-#include <visnav/hash.h>
 
 #define UNUSED(x) (void)(x)
 
@@ -295,6 +294,21 @@ using BowVector = std::vector<std::pair<WordId, WordValue>>;
 
 /// Result of BoW query. Should be sorted by the confidence.
 using BowQueryResult = std::vector<std::pair<TimeCamId, double>>;
+
+/// covisibility graph, store the TimeId of current frame and its neighors and
+/// the weight(how many keypoints they observed in common)
+using CovisibilityGraph = std::map<FrameId, std::map<FrameId, int>>;
+
+/// essential graph, store the TimeId of current frame and its neighors
+using EssentialGraph = std::map<FrameId, std::map<FrameId, int>>;
+
+struct ErrorMetricValue {
+  double rmse = 0;
+  double mean = 0;
+  double min = 0;
+  double max = 0;
+  double count = 0;  //!< number of elements involved in the evaluation
+};
 
 }  // namespace visnav
 

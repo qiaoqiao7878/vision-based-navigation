@@ -48,6 +48,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <visnav/common_types.h>
 #include <visnav/serialization.h>
 
+#include <visnav/covisibility_graph.h>
+
 #include <visnav/reprojection.h>
 #include <visnav/local_parameterization_se3.hpp>
 
@@ -470,6 +472,397 @@ void bundle_adjustment(const Corners& feature_corners,
       std::cout << summary.FullReport() << std::endl;
       break;
   }
+}  // bundle_adjustment
+
+// Run bundle adjustment to optimize cameras, points, and optionally
+// intrinsics
+void local_bundle_adjustment(const Corners& feature_corners,
+                             const BundleAdjustmentOptions& options,
+                             Calibration& calib_cam, Cameras& fixed_cameras,
+                             Cameras& activate_cameras, Cameras& cameras,
+                             Landmarks& landmarks) {
+  ceres::Problem problem;
+
+  // Adding parameter T_w_c for every camera
+  for (auto& ca : activate_cameras) {
+    // std::cout << " add cameras " << ca.first << std::endl;
+    problem.AddParameterBlock(ca.second.T_w_c.data(),
+                              ca.second.T_w_c.num_parameters,
+                              new Sophus::test::LocalParameterizationSE3);
+  }
+  for (auto& ca : fixed_cameras) {
+    // std::cout << " add cameras " << ca.first << std::endl;
+
+    problem.AddParameterBlock(ca.second.T_w_c.data(),
+                              ca.second.T_w_c.num_parameters,
+                              new Sophus::test::LocalParameterizationSE3);
+    // if this camrera is in the set of fixed cameras, set parameter to be
+    // constant
+    problem.SetParameterBlockConstant(ca.second.T_w_c.data());
+  }
+
+  // adding intrinsics parameters use maximum number 8
+  for (auto& intr : calib_cam.intrinsics) {
+    problem.AddParameterBlock(intr->data(), 8);
+    // optimizing intrinstics or not depending on options
+    if (options.optimize_intrinsics == false) {
+      problem.SetParameterBlockConstant(intr->data());
+    }
+  }
+
+  // get the name of camera model, cam_model is a string
+  std::string cam_model = calib_cam.intrinsics[0]->name();
+  // loop over every landmarks
+  for (auto& lm : landmarks) {
+    for (auto& lm_outliers : lm.second.outlier_obs) {
+      // if landmark is an outliers of activate cameras, don't add this landmark
+      // in local BA
+      if (activate_cameras.count(lm_outliers.first) != 0) {
+        continue;
+      }
+    }
+    // loop over every obs
+    for (auto& lm_obs : lm.second.obs) {
+      if (activate_cameras.count(lm_obs.first) != 0) {
+        // get the featureId for this camera in this landmarks
+        FeatureId fid = lm_obs.second;
+        // using Corners = tbb::concurrent_unordered_map<TimeCamId,
+        // KeypointsData>;
+        Eigen::Vector2d p_2d =
+            feature_corners.find(lm_obs.first)->second.corners[fid];
+
+        BundleAdjustmentReprojectionCostFunctor* c =
+            new BundleAdjustmentReprojectionCostFunctor(p_2d, cam_model);
+
+        ceres::CostFunction* cost_function = new ceres::AutoDiffCostFunction<
+            BundleAdjustmentReprojectionCostFunctor, 2, 7, 3, 8>(c);
+
+        if (options.use_huber == true) {
+          problem.AddResidualBlock(
+              cost_function, new ceres::HuberLoss(options.huber_parameter),
+              cameras.find(lm_obs.first)->second.T_w_c.data(),
+              lm.second.p.data(),
+              calib_cam.intrinsics[lm_obs.first.cam_id]->data());
+        } else {
+          problem.AddResidualBlock(
+              cost_function, NULL,
+              cameras.find(lm_obs.first)->second.T_w_c.data(),
+              lm.second.p.data(),
+              calib_cam.intrinsics[lm_obs.first.cam_id]->data());
+        }
+      }
+    }
+  }
+  UNUSED(feature_corners);
+  UNUSED(options);
+  UNUSED(fixed_cameras);
+  UNUSED(calib_cam);
+  UNUSED(cameras);
+  UNUSED(landmarks);
+
+  // Solve
+  ceres::Solver::Options ceres_options;
+  ceres_options.max_num_iterations = options.max_num_iterations;
+  ceres_options.linear_solver_type = ceres::SPARSE_SCHUR;
+  ceres_options.num_threads = tbb::task_scheduler_init::default_num_threads();
+  ceres::Solver::Summary summary;
+  Solve(ceres_options, &problem, &summary);
+  switch (options.verbosity_level) {
+    // 0: silent
+    case 1:
+      std::cout << summary.BriefReport() << std::endl;
+      break;
+    case 2:
+      std::cout << summary.FullReport() << std::endl;
+      break;
+  }
+}  // local_bundle_adjustment
+
+// optimize relative pose for loop
+void relative_se3_optimization(const TimeCamId& tcidi, const TimeCamId& tcidl,
+                               const Cameras& cameras,
+                               const Corners& feature_corners,
+                               Calibration& calib_cam, Landmarks& landmarks,
+                               MatchData& md) {
+  ceres::Problem problem;
+  Sophus::SE3d T_i_l = md.T_i_j;
+
+  //  Setup optimization problem
+
+  problem.AddParameterBlock(T_i_l.data(), T_i_l.num_parameters,
+                            new Sophus::test::LocalParameterizationSE3);
+
+  std::vector<Eigen::Vector2d> pi_2ds;
+  std::vector<Eigen::Vector2d> pl_2ds;
+  std::vector<Eigen::Vector3d> pi_3ds;
+  std::vector<Eigen::Vector3d> pl_3ds;
+
+  double huber_parameter = 1.0;
+  int max_num_iterations = 50;
+
+  for (auto& inlier : md.inliers) {
+    FeatureId featurei = inlier.first;
+    FeatureId featurel = inlier.second;
+    Eigen::Vector2d pi_2d =
+        feature_corners.find(tcidi)->second.corners[featurei];
+    Eigen::Vector2d pl_2d =
+        feature_corners.find(tcidl)->second.corners[featurel];
+    Eigen::Vector3d pi_3d;
+    Eigen::Vector3d pl_3d;
+    pi_3d.setZero();
+    pl_3d.setZero();
+    for (const auto& lm : landmarks) {
+      if (lm.second.obs.count(tcidi) != 0) {
+        FeatureId featuretracki = lm.second.obs.find(tcidi)->second;
+        if (featuretracki == featurei) {
+          pi_3d = cameras.find(tcidi)->second.T_w_c.inverse() * lm.second.p;
+        }
+      }
+      if (lm.second.obs.count(tcidl) != 0) {
+        FeatureId featuretrackl = lm.second.obs.find(tcidl)->second;
+        if (featuretrackl == featurel) {
+          pl_3d = cameras.find(tcidl)->second.T_w_c.inverse() * lm.second.p;
+        }
+      }
+    }
+    Eigen::Vector3d p0;
+    p0.setZero();
+    if (pi_3d == p0 || pl_3d == p0) {
+      continue;
+    } else {
+      pi_2ds.push_back(pi_2d);
+      pl_2ds.push_back(pl_2d);
+      pi_3ds.push_back(pi_3d);
+      pl_3ds.push_back(pl_3d);
+    }
+  }
+  // adding intrinsics parameters use maximum number 8
+  for (auto& intr : calib_cam.intrinsics) {
+    problem.AddParameterBlock(intr->data(), 8);
+    // not optimizing intrinstics
+    problem.SetParameterBlockConstant(intr->data());
+  }
+
+  // get the name of camera model, cam_model is a string
+  std::string cam_model = calib_cam.intrinsics[0]->name();
+  // loop over every landmarks
+  std::cout << "pi_2ds.size" << pi_2ds.size() << std::endl;
+  if (pi_2ds.size() > 8) {
+    for (size_t i = 0; i < pi_2ds.size(); i++) {
+      Eigen::Vector2d pi_2d = pi_2ds[i];
+      Eigen::Vector3d pi_3d = pi_3ds[i];
+      Eigen::Vector2d pl_2d = pl_2ds[i];
+      Eigen::Vector3d pl_3d = pl_3ds[i];
+
+      RelativeSim3ReprojectionCostFunctor* c =
+          new RelativeSim3ReprojectionCostFunctor(pi_2d, pi_3d, pl_2d, pl_3d,
+                                                  cam_model);
+
+      ceres::CostFunction* cost_function =
+          new ceres::AutoDiffCostFunction<RelativeSim3ReprojectionCostFunctor,
+                                          4, 7, 8>(c);
+      // use huber loss function
+      problem.AddResidualBlock(
+          cost_function, new ceres::HuberLoss(huber_parameter), T_i_l.data(),
+          calib_cam.intrinsics[tcidi.cam_id]->data());
+    }
+
+    UNUSED(feature_corners);
+    UNUSED(calib_cam);
+
+    // Solve
+    ceres::Solver::Options ceres_options;
+    ceres_options.max_num_iterations = max_num_iterations;
+    // For small problems like that better use ceres::DENSE_QR
+    ceres_options.linear_solver_type = ceres::DENSE_QR;
+    ceres_options.num_threads = tbb::task_scheduler_init::default_num_threads();
+    ceres::Solver::Summary summary;
+    Solve(ceres_options, &problem, &summary);
+    md.T_i_j = T_i_l;
+
+    std::cout << summary.BriefReport() << std::endl;
+  }
+
 }  // namespace visnav
+
+// optimize relative pose for loop
+void relative_se3_optimization_using_lmmatches(
+    const TimeCamId& tcidi, const TimeCamId& tcidl, const Cameras& cameras,
+    const Corners& feature_corners, Calibration& calib_cam,
+    Landmarks& landmarks, LandmarkMatchData& md_i, LandmarkMatchData& md_l,
+    Sophus::SE3d& T_i_l) {
+  ceres::Problem problem;
+
+  //  Setup optimization problem
+
+  problem.AddParameterBlock(T_i_l.data(), T_i_l.num_parameters,
+                            new Sophus::test::LocalParameterizationSE3);
+
+  std::vector<Eigen::Vector2d> pi_2ds;
+  std::vector<Eigen::Vector2d> pl_2ds;
+  std::vector<Eigen::Vector3d> pi_3ds;
+  std::vector<Eigen::Vector3d> pl_3ds;
+
+  double huber_parameter = 1.0;
+  int max_num_iterations = 50;
+
+  for (auto& mt : md_i.matches) {
+    FeatureId featurei = mt.first;
+    TrackId tid_l = mt.second;
+    Eigen::Vector2d pi_2d =
+        feature_corners.find(tcidi)->second.corners[featurei];
+    Eigen::Vector3d pl_3d = cameras.find(tcidl)->second.T_w_c.inverse() *
+                            landmarks.find(tid_l)->second.p;
+    pi_2ds.push_back(pi_2d);
+    pl_3ds.push_back(pl_3d);
+  }
+
+  for (auto& mt : md_l.matches) {
+    FeatureId featurel = mt.first;
+    TrackId tid_i = mt.second;
+    Eigen::Vector2d pl_2d =
+        feature_corners.find(tcidl)->second.corners[featurel];
+
+    Eigen::Vector3d pi_3d = cameras.find(tcidi)->second.T_w_c.inverse() *
+                            landmarks.find(tid_i)->second.p;
+
+    pl_2ds.push_back(pl_2d);
+    pi_3ds.push_back(pi_3d);
+  }
+  // adding intrinsics parameters use maximum number 8
+  for (auto& intr : calib_cam.intrinsics) {
+    problem.AddParameterBlock(intr->data(), 8);
+    // not optimizing intrinstics
+    problem.SetParameterBlockConstant(intr->data());
+  }
+
+  // get the name of camera model, cam_model is a string
+  std::string cam_model = calib_cam.intrinsics[0]->name();
+  // loop over every landmarks
+
+  if (pi_2ds.size() > 8 && pl_2ds.size() > 8) {
+    for (size_t i = 0; i < std::min(pi_2ds.size(), pl_2ds.size()); i++) {
+      Eigen::Vector2d pi_2d = pi_2ds[i];
+      Eigen::Vector3d pi_3d = pi_3ds[i];
+      Eigen::Vector2d pl_2d = pl_2ds[i];
+      Eigen::Vector3d pl_3d = pl_3ds[i];
+
+      RelativeSim3ReprojectionCostFunctor* c =
+          new RelativeSim3ReprojectionCostFunctor(pi_2d, pi_3d, pl_2d, pl_3d,
+                                                  cam_model);
+
+      ceres::CostFunction* cost_function =
+          new ceres::AutoDiffCostFunction<RelativeSim3ReprojectionCostFunctor,
+                                          4, 7, 8>(c);
+      // use huber loss function
+      problem.AddResidualBlock(
+          cost_function, new ceres::HuberLoss(huber_parameter), T_i_l.data(),
+          calib_cam.intrinsics[tcidi.cam_id]->data());
+    }
+
+    UNUSED(feature_corners);
+    UNUSED(calib_cam);
+
+    // Solve
+    ceres::Solver::Options ceres_options;
+    ceres_options.max_num_iterations = max_num_iterations;
+    // For small problems like that better use ceres::DENSE_QR
+    ceres_options.linear_solver_type = ceres::DENSE_QR;
+    ceres_options.num_threads = tbb::task_scheduler_init::default_num_threads();
+    ceres::Solver::Summary summary;
+    Solve(ceres_options, &problem, &summary);
+    std::cout << summary.BriefReport() << std::endl;
+  }
+
+}  // namespace visnav
+
+void update_active_cameras(const TimeCamId& tcidl, const TimeCamId& tcidr,
+                           Cameras& active_cameras, const Cameras& cameras,
+                           const CovisibilityGraph& covisibility_graph,
+                           const int threshold) {
+  active_cameras.clear();
+
+  // add the cameras in current frame
+  active_cameras.insert(*cameras.find(tcidl));
+  active_cameras.insert(*cameras.find(tcidr));
+
+  std::set<FrameId> neighbors;
+  neighbors = return_neighbors_in_covisibility(covisibility_graph, tcidl.t_ns,
+                                               threshold);
+  for (const auto& nb : neighbors) {
+    // if this camera doesn't exist in current active_cameras, avoiding adding
+    // the same camera twice
+    TimeCamId tidl(nb, 0);
+    if (active_cameras.count(tidl) == 0 && nb != 0) {
+      TimeCamId tidr(nb, 1);
+
+      // add left camera
+      active_cameras.insert(*cameras.find(tidl));
+      // add right camera
+      active_cameras.insert(*cameras.find(tidr));
+    }
+  }
+
+  // make sure the active cameras have mindesten 10 keyframe (20 cameras)
+  for (auto rit = cameras.rbegin(); rit != cameras.rend(); ++rit) {
+    if (active_cameras.count(rit->first) == 0) {
+      active_cameras.insert(*rit);
+    }
+    if (active_cameras.size() >= 20) {
+      break;
+    }
+  }
+}
+void update_active_landmarks(const Cameras& active_cameras,
+                             const Landmarks& landmarks,
+                             Landmarks& active_landmarks) {
+  active_landmarks.clear();
+  for (const auto& ca : active_cameras) {
+    for (const auto& lm : landmarks) {
+      // if this camera observe this landmark
+      if (lm.second.obs.count(ca.first)) {
+        // if this landmark doesn't exist in current active_landmarks,
+        // avoiding adding the same landmark twice
+        if (active_landmarks.count(lm.first) == 0) {
+          active_landmarks.insert(lm);
+        }
+      }
+    }
+  }
+}
+
+void update_fixed_cameras(const Cameras& cameras, const Cameras& active_cameras,
+                          Cameras& fixed_cameras, Landmarks& active_landmarks) {
+  fixed_cameras.clear();
+  // the first frame always fixed
+  TimeCamId tid(0, 0);
+  fixed_cameras.insert(*cameras.find(tid));
+  tid.cam_id = 1;
+  fixed_cameras.insert(*cameras.find(tid));
+
+  // All other keyframes that see those points but are not connected to the
+  // currently processed keyframe are included in the optimization but remain
+  // fixed
+  for (const auto& lm : active_landmarks) {
+    for (const auto& obs : lm.second.obs) {
+      // if this camera is not in the active_camera and it didn't be added
+      // before
+      if (active_cameras.count(obs.first) == 0 &&
+          fixed_cameras.count(obs.first) == 0) {
+        fixed_cameras.insert(*cameras.find(obs.first));
+        TimeCamId tid_stereo = obs.first;
+        if (obs.first.cam_id == 0) {
+          tid_stereo.cam_id = 1;
+        } else {
+          tid_stereo.cam_id = 0;
+        }
+        if (active_cameras.count(tid_stereo) == 0 &&
+            fixed_cameras.count(tid_stereo) == 0) {
+          fixed_cameras.insert(*cameras.find(tid_stereo));
+        }
+      }
+    }
+  }
+}
 
 }  // namespace visnav

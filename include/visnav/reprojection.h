@@ -99,4 +99,41 @@ struct BundleAdjustmentReprojectionCostFunctor {
   std::string cam_model;
 };
 
+struct RelativeSim3ReprojectionCostFunctor {
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  RelativeSim3ReprojectionCostFunctor(const Eigen::Vector2d& pi_2d,
+                                      const Eigen::Vector3d& pi_3d,
+                                      const Eigen::Vector2d& pl_2d,
+                                      const Eigen::Vector3d& pl_3d,
+                                      const std::string& cam_model)
+      : pi_2d(pi_2d),
+        pi_3d(pi_3d),
+        pl_2d(pl_2d),
+        pl_3d(pl_3d),
+        cam_model(cam_model) {}
+
+  template <class T>
+  bool operator()(T const* const sT_i_l, T const* const sIntr,
+                  T* sResiduals) const {
+    // map inputs
+    Eigen::Map<Sophus::SE3<T> const> const T_i_l(sT_i_l);
+    Eigen::Map<Eigen::Matrix<T, 4, 1>> residuals(sResiduals);
+    const std::shared_ptr<AbstractCamera<T>> cam =
+        AbstractCamera<T>::from_data(cam_model, sIntr);
+
+    // TODO SHEET 4: Compute reprojection error
+    residuals[0] = (pi_2d - cam->project(T_i_l * pl_3d))[0];
+    residuals[1] = (pi_2d - cam->project(T_i_l * pl_3d))[1];
+    residuals[2] = (pl_2d - cam->project(T_i_l.inverse() * pi_3d))[0];
+    residuals[3] = (pl_2d - cam->project(T_i_l.inverse() * pi_3d))[1];
+
+    return true;
+  }
+  Eigen::Vector2d pi_2d;
+  Eigen::Vector3d pi_3d;
+  Eigen::Vector2d pl_2d;
+  Eigen::Vector3d pl_3d;
+  std::string cam_model;
+};
+
 }  // namespace visnav

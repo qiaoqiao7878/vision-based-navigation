@@ -38,9 +38,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <Eigen/Dense>
 #include <sophus/se3.hpp>
 
+#include <opengv/point_cloud/PointCloudAdapter.hpp>
+#include <opengv/point_cloud/methods.hpp>
 #include <opengv/relative_pose/CentralRelativeAdapter.hpp>
 #include <opengv/relative_pose/methods.hpp>
 #include <opengv/sac/Ransac.hpp>
+#include <opengv/sac_problems/point_cloud/PointCloudSacProblem.hpp>
 #include <opengv/sac_problems/relative_pose/CentralRelativePoseSacProblem.hpp>
 
 #include <visnav/camera_models.h>
@@ -165,4 +168,128 @@ void findInliersRansac(const KeypointsData& kd1, const KeypointsData& kd2,
   UNUSED(ransac_thresh);
   UNUSED(ransac_min_inliers);
 }
+void ThreeDRansac(Landmarks& landmarks, const Cameras& cameras,
+                  const TimeCamId& tcidi, const TimeCamId& tcidl,
+                  const double ransac_thresh, const int ransac_min_inliers,
+                  MatchData& md) {
+  md.inliers.clear();
+
+  // Run RANSAC with using opengv's Piont cloud and store
+  // the final inlier indices in md.inliers and the final relative pose in
+  // md.T_i_j (normalize translation). Note that if the initial RANSAC
+  // was successful, you should do non-linear refinement of the model parameters
+  // using all inliers, and then re-estimate the inlier set with the refined
+  // model parameters.
+  opengv::bearingVectors_t pi_3d(md.matches.size());
+  opengv::bearingVectors_t pl_3d(md.matches.size());
+  Eigen::Vector2d pi_2d;
+  Eigen::Vector2d pl_2d;
+  for (size_t j = 0; j < md.matches.size(); j++) {
+    for (const auto& lm : landmarks) {
+      if (lm.second.obs.count(tcidi) != 0) {
+        if (lm.second.obs.find(tcidi)->second == md.matches[j].first) {
+          // transform the point positions into the frame of the respective
+          // camera
+          pi_3d[j] = cameras.find(tcidi)->second.T_w_c.inverse() * lm.second.p;
+        }
+      }
+      if (lm.second.obs.count(tcidl) != 0) {
+        if (lm.second.obs.find(tcidl)->second == md.matches[j].second) {
+          // transform the point positions into the frame of the respective
+          // camera
+          pl_3d[j] = cameras.find(tcidl)->second.T_w_c.inverse() * lm.second.p;
+        }
+      }
+    }
+  }
+
+  int maxIterations = 100;
+
+  // create the PointCloudAdapter
+  opengv::point_cloud::PointCloudAdapter adapter(pi_3d, pl_3d);
+  // create a RANSAC object
+  opengv::sac::Ransac<opengv::sac_problems::point_cloud::PointCloudSacProblem>
+      ransac;
+  // create a PointCloudSacProblem
+
+  // create the sample consensus problem
+  std::shared_ptr<opengv::sac_problems::point_cloud::PointCloudSacProblem>
+      relposeproblem_ptr(
+          new opengv::sac_problems::point_cloud::PointCloudSacProblem(adapter));
+  // run ransac
+  ransac.sac_model_ = relposeproblem_ptr;
+  ransac.threshold_ = ransac_thresh;
+  ransac.max_iterations_ = maxIterations;
+  ransac.computeModel(0);
+
+  // return the result
+  // opengv::transformation_t transformation = ransac.model_coefficients_;
+  std::cout << "ransac.inliers_ size before opt" << ransac.inliers_.size()
+            << std::endl;
+
+  // non-linear optimization (using all inliers)
+  opengv::transformation_t transformation =
+      opengv::point_cloud::optimize_nonlinear(adapter, ransac.inliers_);
+  // reselect inliers
+  ransac.sac_model_->selectWithinDistance(transformation, ransac.threshold_,
+                                          ransac.inliers_);
+
+  std::cout << "ransac.inliers_ size after opt" << ransac.inliers_.size()
+            << std::endl;
+
+  std::vector<int> inlier_index;
+  inlier_index = ransac.inliers_;
+
+  // store inliers
+  for (size_t i = 0; i < inlier_index.size(); i++) {
+    md.inliers.push_back(md.matches[inlier_index[i]]);
+  }
+  // store translation
+  md.T_i_j.translation() = transformation.matrix().col(3);
+  // store rotation matrix
+  Eigen::Matrix3d rotation_matrix;
+  rotation_matrix = transformation.matrix().block(0, 0, 3, 3);
+  md.T_i_j.so3() = rotation_matrix;
+  UNUSED(ransac_thresh);
+  UNUSED(ransac_min_inliers);
+}
+
+void get_landmark_correspondences_from_matchdata(
+    const TimeCamId& tcid, const TimeCamId& tcid_loop,
+    const Landmarks& landmarks, const MatchData& md,
+    std::map<TrackId, TrackId>& lm_md) {
+  for (auto& inl : md.inliers) {
+    TrackId tid = -1;
+    TrackId tid_loop = -1;
+
+    for (auto& lm : landmarks) {
+      if (lm.second.obs.count(tcid) != 0) {
+        if (lm.second.obs.find(tcid)->second == inl.first) {
+          tid = lm.first;
+        }
+      }
+      if (lm.second.obs.count(tcid_loop) != 0) {
+        if (lm.second.obs.find(tcid_loop)->second == inl.second) {
+          tid_loop = lm.first;
+        }
+      }
+    }
+    if (tid != -1 && tid_loop != -1) {
+      lm_md.insert(std::make_pair(tid, tid_loop));
+    }
+  }
+}
+
+void get_TrackId_from_FeatureId(const TimeCamId& tcid,
+                                const Landmarks& landmarks,
+                                const FeatureId& fid, TrackId& tid) {
+  for (auto& lm : landmarks) {
+    if (lm.second.obs.count(tcid) != 0) {
+      if (lm.second.obs.find(tcid)->second == fid) {
+        tid = lm.first;
+      }
+    }
+  }
+}
+
 }  // namespace visnav

@@ -69,8 +69,7 @@ class BowDatabase {
 
     // Result of BoW query. Should be sorted by the confidence.
     // using BowQueryResult = std::vector<std::pair<TimeCamId, double>>;
-    // std::cout << "bow: " << bow_vector.size() << "\n"; 978
-    // std::cout << "num: " << num_results << "\n"; 20
+
     std::unordered_map<TimeCamId, double> score;
 
     for (const auto& bv : bow_vector) {
@@ -97,8 +96,8 @@ class BowDatabase {
     for (const auto& sc : score) {
       results.push_back(std::make_pair(sc.first, sc.second));
     }
-
-    if (results.size() >= num_results) {
+    if (results.size() == 1) {
+    } else if (results.size() >= num_results) {
       std::partial_sort(
           results.begin(), results.begin() + num_results, results.end(),
           [](const auto& a, const auto& b) { return a.second < b.second; });
