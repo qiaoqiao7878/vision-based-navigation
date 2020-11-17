@@ -113,6 +113,9 @@ target_link_libraries(sfm ceres pangolin TBB OpenCV opengv)
 add_executable(odometry src/odometry.cpp)
 target_link_libraries(odometry ceres pangolin TBB OpenCV opengv)
 
+add_executable(SLAM src/SLAM.cpp)
+target_link_libraries(SLAM ceres pangolin TBB OpenCV opengv)
+
 
 
 enable_testing()

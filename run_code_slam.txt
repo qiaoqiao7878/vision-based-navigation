@@ -1,0 +1,4 @@
+./build/SLAM --dataset-path data/V1_01_easy/mav0/ --voc-path data/ORBvoc.cereal
+
+
+./build/odometry --dataset-path data/V2_01_easy/mav0/
